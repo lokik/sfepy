@@ -307,7 +307,7 @@ class Domain(Struct):
         The groups with elements of lower dimension than the space dimension
         are skipped.
         """
-        from extmods.mesh import orient_elements
+        from extmods.cmesh import orient_elements
 
         coors = self.mesh.coors
         for ii, group in self.groups.iteritems():
@@ -542,6 +542,7 @@ class Domain(Struct):
 
             if region.has_cells():
                 for ig in region.igs:
+                    if not region.true_cells[ig]: continue
                     ii = region.get_cells(ig)
                     aux.mat_ids[ig][ii] = c_ig
                     c_ig += 1

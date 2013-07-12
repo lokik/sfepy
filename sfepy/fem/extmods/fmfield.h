@@ -80,6 +80,9 @@ int32 fmf_freeDestroy( FMField **p_obj );
 int32 fmf_pretend( FMField *obj,
 		   int32 nCell, int32 nLev, int32 nRow, int32 nCol,
 		   float64 *data );
+int32 fmf_pretend_nc( FMField *obj,
+                      int32 nCell, int32 nLev, int32 nRow, int32 nCol,
+                      float64 *data );
 int32 fmfr_pretend( FMField *obj,
 		    int32 nLev, int32 nRow, int32 nCol,
 		    float64 *data, int32 offset, int32 nColFull );
@@ -96,6 +99,7 @@ int32 fmfc_mulC( FMField *obj, float64 val );
 int32 fmf_mul( FMField *obj, float64 *val );
 
 int32 fmf_mulAC( FMField *objR, FMField *objA, float64 val );
+int32 fmf_mulATC( FMField *objR, FMField *objA, float64 val );
 int32 fmf_mulAF( FMField *objR, FMField *objA, float64 *val );
 int32 fmf_mulATF( FMField *objR, FMField *objA, float64 *val );
 int32 fmf_mulAB_nn( FMField *objR, FMField *objA, FMField *objB );

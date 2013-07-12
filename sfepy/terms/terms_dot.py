@@ -36,6 +36,13 @@ class DotProductVolumeTerm(Term):
     name = 'dw_volume_dot'
     arg_types = (('opt_material', 'virtual', 'state'),
                  ('opt_material', 'parameter_1', 'parameter_2'))
+    arg_shapes = [{'opt_material' : '1, 1', 'virtual' : (1, 'state'),
+                   'state' : 1, 'parameter_1' : 1, 'parameter_2' : 1},
+                  {'opt_material' : None},
+                  {'opt_material' : '1, 1', 'virtual' : ('D', 'state'),
+                   'state' : 'D', 'parameter_1' : 'D', 'parameter_2' : 'D'},
+                  {'opt_material' : 'D, D'},
+                  {'opt_material' : None}]
     modes = ('weak', 'eval')
 
     @staticmethod
@@ -73,9 +80,13 @@ class DotProductVolumeTerm(Term):
         return status
 
     def check_shapes(self, mat, virtual, state):
+        is_vector_scalar = ((virtual.n_components == 1)
+            and (state.n_components == state.dim))\
+            or ((virtual.n_components == virtual.dim)
+            and (state.n_components == 1))
+
         assert_((virtual.n_components == state.n_components)
-                or ((virtual.n_components == 1)
-                    and (state.n_components == state.dim)))
+                or is_vector_scalar)
 
         if mat is not None:
             n_el, n_qp, dim, n_en, n_c = self.get_data_shape(state)
@@ -103,7 +114,12 @@ class DotProductVolumeTerm(Term):
                 fmode = 1
 
             if state.n_components > 1:
-                fun = terms.dw_volume_dot_vector
+                if ((self.integration == 'volume')
+                    or (virtual.n_components > 1)):
+                    fun = terms.dw_volume_dot_vector
+
+                else:
+                    fun = terms.dw_surface_s_v_dot_n
 
             else:
                 if ((self.integration == 'volume')
@@ -111,7 +127,7 @@ class DotProductVolumeTerm(Term):
                     fun = terms.dw_volume_dot_scalar
 
                 else:
-                    fun = terms.dw_surface_dot_vectornormscalar
+                    fun = terms.dw_surface_v_dot_n_s
 
             return mat, val_qp, vgeo, sgeo, fun, fmode
 
@@ -149,6 +165,7 @@ class DotProductSurfaceTerm(DotProductVolumeTerm):
         \int_\Gamma q p \mbox{ , } \int_\Gamma \ul{v} \cdot \ul{u}
         \mbox{ , }
         \int_\Gamma \ul{v} \cdot \ul{n} p \mbox{ , }
+        \int_\Gamma q \ul{n} \cdot \ul{u} \mbox{ , }
         \int_\Gamma p r \mbox{ , } \int_\Gamma \ul{u} \cdot \ul{w}
         \mbox{ , } \int_\Gamma \ul{w} \cdot \ul{n} p \\
         \int_\Gamma c q p \mbox{ , } \int_\Gamma c \ul{v} \cdot \ul{u}
@@ -191,6 +208,9 @@ class BCNewtonTerm(DotProductSurfaceTerm):
     """
     name = 'dw_bc_newton'
     arg_types = ('material_1', 'material_2', 'virtual', 'state')
+    arg_shapes = {'material_1' : '1, 1', 'material_2' : '1, 1',
+                  'virtual' : (1, 'state'), 'state' : 1}
+    mode = 'weak'
 
     def check_shapes(self, alpha, p_outer, virtual, state):
         pass
@@ -307,12 +327,12 @@ class VectorDotGradScalarTerm(Term):
     :Arguments 1:
         - material : :math:`c` or :math:`\ull{M}` (optional)
         - virtual  : :math:`\ul{v}`
-        - state    : :math:`\ul{p}`
+        - state    : :math:`p`
 
     :Arguments 2:
         - material : :math:`c` or :math:`\ull{M}` (optional)
         - state    : :math:`\ul{u}`
-        - virtual  : :math:`\ul{q}`
+        - virtual  : :math:`q`
 
     :Arguments 3:
         - material    : :math:`c` or :math:`\ull{M}` (optional)
@@ -323,6 +343,12 @@ class VectorDotGradScalarTerm(Term):
     arg_types = (('opt_material', 'virtual', 'state'),
                  ('opt_material', 'state', 'virtual'),
                  ('opt_material', 'parameter_v', 'parameter_s'))
+    arg_shapes = [{'opt_material' : '1, 1',
+                   'virtual/v_weak' : ('D', None), 'state/v_weak' : 1,
+                   'virtual/s_weak' : (1, None), 'state/s_weak' : 'D',
+                   'parameter_v' : 'D', 'parameter_s' : 1},
+                  {'opt_material' : 'D, D'},
+                  {'opt_material' : None}]
     modes = ('v_weak', 's_weak', 'eval')
 
     def check_shapes(self, coef, vvar, svar):
@@ -404,26 +430,41 @@ class ScalarDotGradIScalarTerm(Term):
     """
     name = 'dw_s_dot_grad_i_s'
     arg_types = ('material', 'virtual', 'state')
+    arg_shapes = {'material' : '1, 1', 'virtual' : (1, 'state'), 'state' : 1}
 
     @staticmethod
-    def dw_fun(out, bf, vg, idx):
+    def dw_fun(out, bf, vg, grad, idx, fmode):
         cc = nm.ascontiguousarray
         bft = cc(nm.tile(bf, (out.shape[0], 1, 1, 1)))
-        status = terms.mulATB_integrate(out, bft,
-                                        cc(vg.bfg[:,:,idx:(idx + 1),:]), vg)
+
+        if fmode == 0:
+            status = terms.mulATB_integrate(out, bft,
+                                            cc(grad[..., idx:idx+1, :]), vg)
+
+        else:
+            status = terms.mulATB_integrate(out, bft,
+                                            cc(vg.bfg[:,:,idx:(idx + 1),:]), vg)
 
         return status
 
     def get_fargs(self, material, virtual, state,
                   mode=None, term_mode=None, diff_var=None, **kwargs):
         if mode == 'weak':
+            if diff_var is None:
+                grad = self.get(state, 'grad')
+                fmode = 0
+
+            else:
+                grad = nm.array([0], ndmin=4, dtype=nm.float64)
+                fmode = 1
+
             ap, vg = self.get_approximation(virtual)
             aps, vgs = self.get_approximation(state)
 
             bf = aps.get_base('v', 0, self.integral)
             idx = int(material[0, 0, 0, 0])
 
-            return bf, vg, idx
+            return bf, vg, grad, idx, fmode
 
         else:
             raise ValueError('unsupported evaluation mode in %s! (%s)'

@@ -132,6 +132,28 @@ int32 fmf_pretend( FMField *obj,
   return( RET_OK );
 }
 
+/*
+  No `(obj->nAlloc >= 0)` check - assumes `obj` to be a FMField with
+  unallocated data meant to point to some buffer.
+*/
+int32 fmf_pretend_nc( FMField *obj,
+                      int32 nCell, int32 nLev, int32 nRow, int32 nCol,
+                      float64 *data )
+{
+  obj->nCell = nCell;
+  obj->nLev = nLev;
+  obj->nRow = nRow;
+  obj->nCol = nCol;
+  obj->val =  obj->val0 = data;
+  obj->nAlloc = -1;
+  obj->offset = 0;
+  obj->nColFull = obj->nCol;
+  obj->cellSize = obj->nLev * obj->nRow * obj->nCol;
+
+  return( RET_OK );
+}
+
+
 #undef __FUNC__
 #define __FUNC__ "fmfr_pretend"
 /*!
@@ -339,6 +361,41 @@ int32 fmf_mulAC( FMField *objR, FMField *objA, float64 val )
     pa = objA->val + objA->nCol * objA->nRow * il;
     for (i = 0; i < (objR->nRow * objR->nCol); i++) {
       pr[i] = pa[i] * val;
+    }
+  }
+
+  return( RET_OK );
+}
+
+#undef __FUNC__
+#define __FUNC__ "fmf_mulATC"
+/*!
+  objR = const * objA^T
+*/
+int32 fmf_mulATC( FMField *objR, FMField *objA, float64 val )
+{
+  int32 ir, ic, il;
+  int32 wa;
+  float64 *pr, *pa;
+
+#ifdef DEBUG_FMF
+  if ((objR->nRow != objA->nCol) || (objR->nCol != objA->nRow)
+      || (objR->nLev != objA->nLev)) {
+    errput( ErrHead "ERR_BadMatch: (%d %d %d) == (%d %d %d)^T * (1)\n",
+	    objR->nLev, objR->nRow, objR->nCol,
+	    objA->nLev, objA->nRow, objA->nCol );
+  }
+#endif
+
+  wa = objA->nCol;
+  for (il = 0; il < (objR->nLev); il++) {
+    pr = objR->val + objR->nCol * objR->nRow * il;
+    pa = objA->val + objA->nCol * objA->nRow * il;
+    for (ir = 0; ir < objR->nRow; ir++) {
+      for (ic = 0; ic < objR->nCol; ic++) {
+	pr[ic] = pa[wa*ic+ir] * val;
+      }
+      pr += objR->nCol;
     }
   }
 

@@ -5,7 +5,7 @@
 
 .. only:: html
 
-   SfePy: simple finite elements in Python
+   SfePy: Simple Finite Elements in Python
    =======================================
 
    SfePy is a software for solving systems of coupled partial differential
@@ -62,6 +62,12 @@
 
    - Fish heart model: http://sfepy.org/fish_heart
    - Phononic materials: http://sfepy.org/phononic
+
+   Related Projects
+   ----------------
+
+   - Semi-automatic generation of finite element meshes from CT/MR scans stored
+     in the DICOM file format: http://sfepy.org/dicom2fem
 
    Support
    -------

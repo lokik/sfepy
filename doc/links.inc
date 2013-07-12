@@ -10,12 +10,14 @@
 .. _sfepy: http://sfepy.org
 .. _sfepy web site: http://sfepy.org
 .. _sfepy mailing list: http://groups.google.com/group/sfepy-devel
+.. _our mailing list: http://groups.google.com/group/sfepy-devel
 .. _sfepy issues: https://github.com/sfepy/sfepy/issues
 .. _issues: https://github.com/sfepy/sfepy/issues
 .. _sfepy download: http://code.google.com/p/sfepy/wiki/Downloads?tm=2
 .. _download: http://code.google.com/p/sfepy/wiki/Downloads?tm=2
 .. _sfepy git repository: https://github.com/sfepy/sfepy
 .. _sfepy tarball: http://github.com/sfepy/sfepy/tarball/master
+.. _our wiki: https://github.com/sfepy/sfepy/wiki
 
 .. other links
 
@@ -30,7 +32,7 @@
 
 .. _enthought python distribution: http://www.enthought.com/products/epd.php
 .. _epd: http://www.enthought.com/products/epd.php
-.. _python(x,y): http://www.pythonxy.com
+.. _python(x,y): http://code.google.com/p/pythonxy
 
 .. _cython: http://cython.org
 .. _ipython: http://ipython.org

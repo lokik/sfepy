@@ -1,5 +1,6 @@
 import numpy as nm
 
+from sfepy.base.base import assert_
 from sfepy.linalg import dot_sequences
 from sfepy.terms.terms import Term, terms
 
@@ -27,6 +28,8 @@ class DiffusionTerm(Term):
     name = 'dw_diffusion'
     arg_types = (('material', 'virtual', 'state'),
                  ('material', 'parameter_1', 'parameter_2'))
+    arg_shapes = {'material' : 'D, D', 'virtual' : (1, 'state'),
+                  'state' : 1, 'parameter_1' : 1, 'parameter_2' : 1}
     modes = ('weak', 'eval')
     symbolic = {'expression': 'div( K * grad( u ) )',
                 'map' : {'u' : 'state', 'K' : 'material'}}
@@ -36,7 +39,7 @@ class DiffusionTerm(Term):
         vg, _ = self.get_mapping(state)
 
         if mat is None:
-            if self.name == 'dw_laplace':
+            if self.name in ('dw_laplace', 'dw_st_pspg_p'):
                 n_el, n_qp, _, _, _ = self.get_data_shape(state)
                 mat = nm.ones((1, n_qp, 1, 1), dtype=nm.float64)
 
@@ -98,6 +101,9 @@ class LaplaceTerm(DiffusionTerm):
     name = 'dw_laplace'
     arg_types = (('opt_material', 'virtual', 'state'),
                  ('opt_material', 'parameter_1', 'parameter_2'))
+    arg_shapes = [{'opt_material' : 'D, D', 'virtual' : (1, 'state'),
+                   'state' : 1, 'parameter_1' : 1, 'parameter_2' : 1},
+                  {'opt_material' : None}]
     modes = ('weak', 'eval')
     symbolic = {'expression': 'c * div( grad( u ) )',
                 'map' : {'u' : 'state', 'c' : 'opt_material'}}
@@ -156,6 +162,7 @@ class DiffusionRTerm(Term):
     """
     name = 'dw_diffusion_r'
     arg_types = ('material', 'virtual')
+    arg_shapes = {'material' : 'D, 1', 'virtual' : (1, None)}
     function = staticmethod(terms.dw_permeability_r)
 
     def get_fargs(self, mat, virtual,
@@ -182,11 +189,13 @@ class DiffusionCoupling(Term):
     arg_types = (('material', 'virtual', 'state'),
                  ('material', 'state', 'virtual'),
                  ('material', 'parameter_1', 'parameter_2'))
+    arg_shapes = {'material' : 'D, 1', 'virtual' : (1, 'state'),
+                  'state' : 1, 'parameter_1' : 1, 'parameter_2' : 1}
     modes = ('weak0', 'weak1', 'eval')
 
     @staticmethod
     def d_fun(out, mat, val, grad, vg):
-        out_qp = grad * mat * val
+        out_qp = val * dot_sequences(mat, grad, 'ATB')
 
         status = vg.integrate(out, out_qp)
 
@@ -285,6 +294,7 @@ class DiffusionVelocityTerm( Term ):
     """
     name = 'ev_diffusion_velocity'
     arg_types = ('material', 'parameter')
+    arg_shapes = {'material' : 'D, D', 'parameter' : 1}
 
     @staticmethod
     def function(out, grad, mat, vg, fmode):
@@ -343,6 +353,7 @@ class SurfaceFluxTerm(Term):
     """
     name = 'd_surface_flux'
     arg_types = ('material', 'parameter')
+    arg_shapes = {'material' : 'D, D', 'parameter' : 1}
     integration = 'surface_extra'
 
     function = staticmethod(terms.d_surface_flux)
@@ -362,3 +373,45 @@ class SurfaceFluxTerm(Term):
         n_fa, n_qp, dim, n_en, n_c = self.get_data_shape(parameter)
 
         return (n_fa, 1, 1, 1), parameter.dtype
+
+class ConvectVGradSTerm(Term):
+    r"""
+    Scalar gradient term with convective velocity.
+
+    :Definition:
+
+    .. math::
+        \int_{\Omega} q (\ul{u} \cdot \nabla p)
+
+    :Arguments:
+        - virtual  : :math:`q`
+        - state_v  : :math:`\ul{u}`
+        - state_s  : :math:`p`
+    """
+    name = 'dw_convect_v_grad_s'
+    arg_types = ('virtual', 'state_v', 'state_s')
+    arg_shapes = [{'virtual' : (1, 'state_s'), 'state_v' : 'D', 'state_s' : 1}]
+    function = terms.dw_convect_v_grad_s
+
+    def get_fargs(self, virtual, state_v, state_s,
+                  mode=None, term_mode=None, diff_var=None, **kwargs):
+        vvg, _ = self.get_mapping(state_v)
+        svg, _ = self.get_mapping(state_s)
+
+        if diff_var is None:
+            grad_s = self.get(state_s, 'grad')
+            val_v = self.get(state_v, 'val')
+            fmode = 0
+
+        elif diff_var == state_s.name:
+            grad_s = nm.array([0], ndmin=4, dtype=nm.float64)
+            val_v = self.get(state_v, 'val')
+            fmode = 1
+
+        else:
+            assert_(diff_var == state_v.name)
+            grad_s = self.get(state_s, 'grad')
+            val_v = nm.array([0], ndmin=4, dtype=nm.float64)
+            fmode = 2
+
+        return val_v, grad_s, vvg, svg, fmode

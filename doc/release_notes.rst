@@ -1,5 +1,270 @@
 # created: 20.07.2007 (-1)
 
+.. _2013.1-2013.2:
+
+from 2013.1 to 2013.2
+=====================
+
+- automatic testing of term calls:
+
+  - merge branch 'i154' - closes #154
+  - define arg_shapes attributes of terms
+  - use new get_arg_kinds() in Term.classify_args() - simplify code
+
+    - new Term._check_variables()
+
+  - update Term.classify_args() to support 'mode' attribute
+  - update Term to support arg_shapes and geometries attributes
+  - fix SurfaceLaplaceLayerTerm, SurfaceCoupleLayerTerm
+  - fix dw_ul_volume() - fixes VolumeULTerm, BulkPressureULTerm
+  - docs: update developer guide - describe new Term attributes
+  - fix and update DeformationGradientTerm
+
+    - rename dq_def_grad -> ev_def_grad
+    - remove DeformationGradientTerm.__call__(), new .function(), .get_fargs(),
+      .get_eval_shape()
+    - update dq_def_grad()
+
+  - fix dw_v_dot_grad_s_sw() (VectorDotGradScalarTerm)
+  - new fmf_mulATC()
+  - fix ScalarDotGradIScalarTerm - add vector mode
+  - fix docstrings of VectorDotGradScalarTerm, TLMembraneTerm
+  - fix SufaceNormalDotTerm - make material shape (D, 1) to be compatible with
+    SDSufaceNormalDotTerm
+  - fix Term.call_function() to clear C errors properly
+  - fix SDSufaceNormalDotTerm
+  - update Term.get() to accept integration argument
+  - fix NSOFSurfMinDPressDiffTerm, DiffusionTerm, DiffusionCoupling,
+    PiezoCouplingTerm
+  - fix docstrings of SDLinearElasticTerm, StokesTerm, GradTerm, DivTerm
+  - new tests/test_term_call_modes.py to automatically test (almost) all terms,
+    skips terms with an empty arg_shapes attribute
+
+- new elastic contact plane term:
+
+  - new flag_points_in_polygon2d()
+  - new ContactPlane - contact plane with polygonal boundary
+
+    - new sfepy/mechanics/contact_planes.py
+    - new plot_polygon(), plot_points()
+
+  - new ContactPlaneTerm (dw_contact_plane)
+  - add custom view for elastic_contact_planes.py example to
+    script/gen_gallery.py
+
+- terms:
+
+  - rename DotTermsDotProductSurfaceTerm functions:
+
+    - dw_surface_dot_vectornormscalar -> dw_surface_s_v_dot_n
+    - dw_surface_dot_scalarnormvector -> dw_surface_v_dot_n_s
+
+  - update DotProductSurfaceTerm: new 'scalar_norm_vector' mode
+
+- postproc.py:
+
+  - force re-read in VTKFileSource.set_filename()
+  - add reload button to ViewerGUI, support watching of vtk files in Viewer
+
+    - new ReloadSource
+    - closes #217
+
+  - fix default opacity in Viewer
+
+- input-output:
+
+  - update VTKMeshIO.write() to mark unfinished write by 'x' in 1. byte
+  - new HDF5MeshIO.read_bounding_box()
+
+- bases:
+
+  - merge branch 'cbases'
+  - move low-level function from bases.pyx to new lagrange.c
+
+    - new sfepy/fem/extmods/lagrange.[ch]
+    - get_barycentric_coors(), get_xi_simplex(), get_xi_tensor(),
+      eval_lagrange_simplex(), eval_lagrange_tensor_product() ('_' prefix from
+      name removed) translated from Cython to C
+    - update bases.pyx, use fmf_pretend_nc(), import FMField directly
+
+  - rename & update script/gen_lobatto_pyx.py -> script/gen_lobatto1d_c.py
+
+    - generate lobatto1d.c and lobatto1h.c
+    - new lobatto1d_template.c, lobatto1d_template.h
+
+  - split lobatto_template.pyx into lobatto_bases.pyx and lobatto.c, low level
+    functions in lobatto.c, as in lagrange.c
+
+- miscellaneous updates:
+
+  - clean up of many modules
+  - new fmf_pretend_nc()
+  - fix dependencies in sfepy/terms/extmods/setup.py - this fixes rebuilding
+    terms.so even when an unrelated file was changed
+  - fix Struct._str() for classes with overloaded .get() (e.g. Term)
+  - fix Domain.save_regions_as_groups() for regions without true cells
+  - fix iterative solvers for tolerances not given in conf - fix PyAMGSolver,
+    PETScKrylovSolver, PETScParallelKrylovSolver
+  - remove compatibility function sorted()
+  - remove unused attribute of CharacteristicFunction
+  - add f_tol tolerance option to ScipyBroyden nonlinear solver
+  - add custom norms to RadialMesh
+
+- tests and examples:
+
+  - new examples/homogenization/perfusion_micro.py + test
+
+    - homogenization of a double-porous medium
+    - new 3D mesh: matrix with two disconnected channels
+
+  - new examples/linear_elasticity/elastic_contact_planes.py + test -
+    demonstrating use of contact plane term
+
+- docs:
+
+  - add development tab, new doc/development.rst
+  - link wiki from development tab
+  - add related projects section
+  - new sections on term evaluation modes and postprocessing/probing
+
+    - move description of term evaluation modes from developer to users guide
+    - update users guide
+    - closes #196
+
+- gallery:
+
+  - improve gen_gallery.py
+
+    - add captions, contents and section titles
+    - move _gallery_template contents to new doc/gallery_template.html
+
+  - fix script/gen_gallery.py for new time stepping
+  - fix output suffix for time-dependent problems in generate_images()
+  - update docstring of gen_gallery.py - describe docs regeneration steps
+
+.. _2012.4-2013.1:
+
+from 2012.4 to 2013.1
+=====================
+
+- solvers:
+
+  - move time stepping solvers to new sfepy/solvers/ts_solvers.py
+  - redesign time stepping, unify use of stationary and evolutionary solvers:
+
+    - new StationarySolver
+    - update PDESolverApp.call()
+    - update TimeSteppingSolver - change __init__(), __call__() arguments,
+      remove .set_step_fun()
+    - remove solve_stationary(), solve_evolutionary()
+    - move prepare_matrix(), prepare_save_data(), make_implicit_step(),
+      make_explicit_step() into sfepy/solvers/ts_solvers.py
+    - new get_initial_state()
+    - update SimpleTimeSteppingSolver.__call__() to implement fully the time
+      stepping loop, new .solve_step()
+    - update ExplicitTimeSteppingSolver, new .solve_step
+
+  - new AdaptiveTimeSteppingSolver - implicit adaptive time stepping solver:
+
+    - new get_min_dt(), adapt_time_step()
+    - new VariableTimeStepper.from_conf(), .set_from_ts(),
+      .set_n_digit_from_min_dt()
+    - update VariableTimeStepper.set_step() to allow only step = 0
+    - update VariableTimeStepper.__iter__() to include t1
+
+- input-output:
+
+  - fix ANSYSCDBMeshIO.read(), guess it with .inp suffix:
+
+    - new .guess()
+    - for mixed element meshes and coordinates without "solid" keyword
+
+  - allow quadratic elements in ANSYSCDBMeshIO.read(), strip extra nodes:
+
+    - allow more format variants
+    - add remap argument to mesh_from_groups()
+    - add .dat suffix
+
+  - update ANSYSCDBMeshIO.read() to support nodes of boundary conditions
+  - support node sets (nodes of boundary conditions) in HDF5MeshIO.read(),
+    .write()
+
+  - fix omitting nodes of boundary conditions in Mesh.write()
+  - add nodal_bcs argument to Mesh.from_data()
+  - update HDF5MeshIO.read() for old meshes without node_sets group
+
+- mesh, domain, regions:
+
+  - support mat_ids in merge_mesh()
+  - new Mesh.__add__() to merge meshes
+  - add verbose argument to gen_block_mesh(), gen_cylinder_mesh()
+  - new gen_extended_block_mesh() mesh generator
+  - fix smooth_mesh() - improve efficiency
+  - support nodes and elements of set in create_bnf()
+  - update region_leaf() and test for "nodes of set" selector:
+
+    - prepare for "elements of set" selector
+    - nodes of group support only int id
+
+  - move bodies of functions for saving regions from ProblemDefinition to
+    Domain:
+
+    - new Domain.save_regions(), .save_regions_as_groups()
+    - update ProblemDefinition.save_regions(), .save_regions_as_groups()
+
+  - new Region.delete_zero_faces(), used in .complete_description()
+  - use Region.get_cells() instead of direct access to cells
+
+    - true cells are checked in Region.get_cells() if needed
+    - true_cells attribute is properly initialized in
+      Region.complete_description()
+
+  - allow dot in set names in create_bnf()
+  - allow dot in region names
+  - fix Region.get_edge_graph() for degenerate edges
+
+- fields, variables:
+
+  - update setting of variables data (use Variable.set_data())
+  - rename/update Variables.non_state_data_from_state() ->
+    .set_data_from_state()
+  - rename/update Variable.data_from_any() -> .set_data()
+  - rename FieldVariable.data_from_qp() -> .set_data_from_qp()
+  - new Variable.is_finite()
+
+- new terms:
+
+  - dw_tl_bulk_active (active bulk pressure term)
+
+- miscellaneous updates:
+
+  - make view button to print view and roll as arguments of postproc.py
+  - set ts directly in ProblemDefinition.update_time_stepper()
+  - add verbose argument to MyBar progress bar
+  - allow to run python shell from debugger
+  - more grammar elements available in parse_conf.py
+  - radial mesh - fixes, integrals and derivatives
+  - new get_face_areas() + test
+  - new global option 'check_term_finiteness'
+  - check finiteness in Term.evaluate()
+  - fix compute_nodal_normals() for degenerate elements, check for zero normals
+  - new configure_output()
+  - remove many unused functions, code clean up
+
+- scripts:
+
+  - script/save_basis.py: plot nodes of selected dofs, new plot_nodes()
+  - script/convert_mesh.py: new --center option
+
+- examples and tests:
+
+  - update linear_elastic_damping.py example to use adaptive time stepping
+  - new tests/test_mesh_generators.py - test basic mesh generators
+
+- docs:
+
+  - add support section to main page
+
 .. _2012.3-2012.4:
 
 from 2012.3 to 2012.4

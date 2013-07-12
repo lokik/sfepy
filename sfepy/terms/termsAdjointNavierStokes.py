@@ -27,6 +27,8 @@ class AdjDivGradTerm(Term):
     """
     name = 'dw_adj_div_grad'
     arg_types = ('material_1', 'material_2', 'virtual', 'parameter')
+    arg_shapes = {'material_1' : '1, 1', 'material_2' : '1, 1',
+                  'virtual' : ('D', None), 'parameter' : 'D'}
 
     function = staticmethod(terms.term_ns_asm_div_grad)
 
@@ -60,6 +62,7 @@ class AdjConvect1Term(Term):
     """
     name = 'dw_adj_convect1'
     arg_types = ('virtual', 'state', 'parameter' )
+    arg_shapes = {'virtual' : ('D', 'state'), 'state' : 'D', 'parameter' : 'D'}
 
     function = staticmethod(terms.dw_adj_convect1)
 
@@ -90,6 +93,7 @@ class AdjConvect2Term(Term):
     """
     name = 'dw_adj_convect2'
     arg_types = ('virtual', 'state', 'parameter' )
+    arg_shapes = {'virtual' : ('D', 'state'), 'state' : 'D', 'parameter' : 'D'}
 
     function = staticmethod(terms.dw_adj_convect2)
 
@@ -123,6 +127,8 @@ class SUPGCAdjStabilizationTerm(Term):
     """
     name = 'dw_st_adj_supg_c'
     arg_types = ('material', 'virtual', 'parameter', 'state')
+    arg_shapes = {'material' : '1, 1', 'virtual' : ('D', 'state'),
+                  'state' : 'D', 'parameter' : 'D'}
 
     function = staticmethod(terms.dw_st_adj_supg_c)
 
@@ -156,6 +162,8 @@ class SUPGPAdj1StabilizationTerm(Term):
     """
     name = 'dw_st_adj1_supg_p'
     arg_types = ('material', 'virtual', 'state', 'parameter')
+    arg_shapes = {'material' : '1, 1', 'virtual' : ('D', 'state'),
+                  'state' : 'D', 'parameter' : 1}
 
     function = staticmethod(terms.dw_st_adj1_supg_p)
 
@@ -189,6 +197,8 @@ class SUPGPAdj2StabilizationTerm(Term):
     """
     name = 'dw_st_adj2_supg_p'
     arg_types = ('material', 'virtual', 'parameter', 'state')
+    arg_shapes = {'material' : '1, 1', 'virtual' : ('D', 'state'),
+                  'state' : 1, 'parameter' : 'D'}
 
     function = staticmethod(terms.dw_st_adj2_supg_p)
 
@@ -221,6 +231,8 @@ class SDDotVolumeTerm(Term):
     """
     name = 'd_sd_volume_dot'
     arg_types = ('parameter_1', 'parameter_2', 'parameter_mesh_velocity')
+    arg_shapes = {'parameter_1' : 'D', 'parameter_2' : 'D',
+                  'parameter_mesh_velocity' : 'D'}
 
     function = staticmethod(terms.d_sd_volume_dot)
 
@@ -259,6 +271,8 @@ class SDDivTerm(Term):
     """
     name = 'd_sd_div'
     arg_types = ('parameter_u', 'parameter_p', 'parameter_mesh_velocity')
+    arg_shapes = {'parameter_u' : 'D', 'parameter_p' : 1,
+                  'parameter_mesh_velocity' : 'D'}
 
     function = staticmethod(terms.d_sd_div)
 
@@ -305,6 +319,9 @@ class SDDivGradTerm(Term):
     name = 'd_sd_div_grad'
     arg_types = ('material_1', 'material_2', 'parameter_u', 'parameter_w',
                  'parameter_mesh_velocity')
+    arg_shapes = {'material_1' : '1, 1', 'material_2' : '1, 1',
+                  'parameter_u' : 'D', 'parameter_w' : 'D',
+                  'parameter_mesh_velocity' : 'D'}
 
     function = staticmethod(terms.d_sd_div_grad)
 
@@ -345,6 +362,8 @@ class SDConvectTerm(Term):
     """
     name = 'd_sd_convect'
     arg_types = ('parameter_u', 'parameter_w', 'parameter_mesh_velocity')
+    arg_shapes = {'parameter_u' : 'D', 'parameter_w' : 'D',
+                  'parameter_mesh_velocity' : 'D'}
 
     function = staticmethod(terms.d_sd_convect)
 
@@ -369,6 +388,8 @@ class SDConvectTerm(Term):
 class NSOFMinGradTerm(Term):
     name = 'd_of_ns_min_grad'
     arg_types = ('material_1', 'material_2', 'parameter')
+    arg_shapes = {'material_1' : '1, 1', 'material_2' : '1, 1',
+                  'parameter' : 1}
 
     function = staticmethod(terms.d_of_nsMinGrad)
 
@@ -401,6 +422,8 @@ class NSOFSurfMinDPressTerm(Term):
     """
     name = 'd_of_ns_surf_min_d_press'
     arg_types = ('material_1', 'material_2', 'parameter')
+    arg_shapes = {'material_1' : 1, 'material_2' : 1,
+                  'parameter' : 1}
     integration = 'surface'
 
     function = staticmethod(terms.d_of_nsSurfMinDPress)
@@ -433,6 +456,7 @@ class NSOFSurfMinDPressDiffTerm(NSOFSurfMinDPressTerm):
     """
     name = 'dw_of_ns_surf_min_d_press_diff'
     arg_types = ('material', 'virtual')
+    arg_shapes = {'material' : 1, 'virtual' : (1, None)}
 
     def get_fargs(self, weight, virtual,
                   mode=None, term_mode=None, diff_var=None, **kwargs):
@@ -440,7 +464,7 @@ class NSOFSurfMinDPressDiffTerm(NSOFSurfMinDPressTerm):
 
         aux = nm.array([0], ndmin=4, dtype=nm.float64)
 
-        return aux, weight, 0.0, sg.bf, sg, 1
+        return aux, weight, 0.0, sg, 1
 
 class SDGradDivStabilizationTerm(Term):
     r"""
@@ -464,6 +488,9 @@ class SDGradDivStabilizationTerm(Term):
     name = 'd_sd_st_grad_div'
     arg_types = ('material', 'parameter_u', 'parameter_w',
                  'parameter_mesh_velocity')
+    arg_shapes = {'material' : '1, 1',
+                  'parameter_u' : 'D', 'parameter_w' : 'D',
+                  'parameter_mesh_velocity' : 'D'}
 
     function = staticmethod(terms.d_sd_st_grad_div)
 
@@ -510,6 +537,9 @@ class SDSUPGCStabilizationTerm(Term):
     name = 'd_sd_st_supg_c'
     arg_types = ('material', 'parameter_b', 'parameter_u', 'parameter_w',
                 'parameter_mesh_velocity')
+    arg_shapes = {'material' : '1, 1',
+                  'parameter_b' : 'D', 'parameter_u' : 'D', 'parameter_w' : 'D',
+                  'parameter_mesh_velocity' : 'D'}
 
     function = staticmethod(terms.d_sd_st_supg_c)
 
@@ -555,6 +585,9 @@ class SDPSPGCStabilizationTerm(Term):
     name = 'd_sd_st_pspg_c'
     arg_types = ('material', 'parameter_b', 'parameter_u', 'parameter_r',
                 'parameter_mesh_velocity')
+    arg_shapes = {'material' : '1, 1',
+                  'parameter_b' : 'D', 'parameter_u' : 'D', 'parameter_r' : 1,
+                  'parameter_mesh_velocity' : 'D'}
 
     function = staticmethod(terms.d_sd_st_pspg_c)
 
@@ -597,6 +630,9 @@ class SDPSPGPStabilizationTerm(Term):
     name = 'd_sd_st_pspg_p'
     arg_types = ('material', 'parameter_r', 'parameter_p',
                 'parameter_mesh_velocity')
+    arg_shapes = {'material' : '1, 1',
+                  'parameter_r' : 1, 'parameter_p' : 1,
+                  'parameter_mesh_velocity' : 'D'}
 
     function = staticmethod(terms.d_sd_st_pspg_p)
 

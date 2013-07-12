@@ -17,15 +17,6 @@ sfepy_config_dir = os.path.expanduser('~/.sfepy')
 if not os.path.exists(sfepy_config_dir):
     os.makedirs(sfepy_config_dir)
 
-##
-# 22.09.2005, c
-# 24.10.2005
-if sys.version[:5] < '2.4.0':
-    def sorted( sequence ):
-        tmp = copy( sequence )
-        tmp.sort()
-        return tmp
-
 if sys.version[0] < '3':
     basestr = basestring
 
@@ -296,7 +287,7 @@ class Struct( object ):
         if keys is None:
             keys = self.__dict__.keys()
 
-        str_attrs = sorted(self.get('_str_attrs', keys))
+        str_attrs = sorted(Struct.get(self, '_str_attrs', keys))
         printed_keys = []
         for key in str_attrs:
             if key[-1] == '.':
@@ -895,6 +886,23 @@ class Output(Struct):
     prefix = property(get_output_prefix, set_output_prefix)
     
 output = Output('sfepy:')
+
+def configure_output(options):
+    """
+    Configure the standard :function:`output()` function using
+    `output_log_name` and `output_screen` attributes of `options`.
+
+    Parameters
+    ----------
+    options : Struct or dict
+        The options with `output_screen` and `output_log_name` items. Defaults
+        are provided if missing.
+    """
+    output_screen = options.get('output_screen', True)
+    output_log_name = options.get('output_log_name', None)
+
+    output.set_output(filename=output_log_name, quiet=not output_screen,
+                      combined=output_screen and (output_log_name is not None))
 
 def print_structs(objs):
     """Print Struct instances in a container, works recursively. Debugging

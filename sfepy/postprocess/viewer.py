@@ -122,7 +122,7 @@ def add_glyphs(obj, position, bbox, rel_scaling=None,
                scale_factor='auto', clamping=False, color=None):
 
     glyphs = mlab.pipeline.glyph(obj, mode='2darrow', scale_mode='vector',
-                                 color=color, opacity=1.0) 
+                                 color=color, opacity=1.0)
     if scale_factor == 'auto':
         rng = glyphs.glyph.glyph.range
         scale_factor = get_glyphs_scale_factor(rng, rel_scaling, bbox)
@@ -221,17 +221,17 @@ class Viewer(Struct):
                  animate=False, anim_format=None, ffmpeg_options=None,
                  output_dir='.', offscreen=False, auto_screenshot=True):
         Struct.__init__(self,
-                        filename = filename,
-                        watch = watch,
-                        animate = animate,
-                        anim_format = anim_format,
-                        ffmpeg_options = ffmpeg_options,
-                        output_dir = output_dir,
-                        offscreen = offscreen,
-                        auto_screenshot = auto_screenshot,
-                        scene = None,
-                        gui = None)
-        self.options = get_arguments(omit = ['self'])
+                        filename=filename,
+                        watch=watch,
+                        animate=animate,
+                        anim_format=anim_format,
+                        ffmpeg_options=ffmpeg_options,
+                        output_dir=output_dir,
+                        offscreen=offscreen,
+                        auto_screenshot=auto_screenshot,
+                        scene=None,
+                        gui=None)
+        self.options = get_arguments(omit=['self'])
 
         if mlab is None:
             output('mlab cannot be imported, check your installation!')
@@ -245,12 +245,12 @@ class Viewer(Struct):
             mlab.figure(fgcolor=self.fgcolor, bgcolor=self.bgcolor,
                         size=(1, 1))
             source = mlab.pipeline.open(self.filename)
-        point_scalar_names = sorted( source._point_scalars_list[:-1] )
-        point_vector_names = sorted( source._point_vectors_list[:-1] )
-        point_tensor_names = sorted( source._point_tensors_list[:-1] )
-        cell_scalar_names = sorted( source._cell_scalars_list[:-1] )
-        cell_vector_names = sorted( source._cell_vectors_list[:-1] )
-        cell_tensor_names = sorted( source._cell_tensors_list[:-1] )
+        point_scalar_names = sorted(source._point_scalars_list[:-1])
+        point_vector_names = sorted(source._point_vectors_list[:-1])
+        point_tensor_names = sorted(source._point_tensors_list[:-1])
+        cell_scalar_names = sorted(source._cell_scalars_list[:-1])
+        cell_vector_names = sorted(source._cell_vectors_list[:-1])
+        cell_tensor_names = sorted(source._cell_tensors_list[:-1])
 
         p_names = [['point', 'scalars', name] for name in point_scalar_names]
         p_names += [['point', 'vectors', name] for name in point_vector_names]
@@ -318,7 +318,7 @@ class Viewer(Struct):
                                       anim_name)
         output('creating animation "%s"...' % anim_name)
         try:
-            os.system(cmd) 
+            os.system(cmd)
         except:
             output('...warning: animation not created, is ffmpeg installed?')
         else:
@@ -345,7 +345,7 @@ class Viewer(Struct):
                             vector_mode='arrows_norm',
                             rel_scaling=None, clamping=False,
                             ranges=None, is_scalar_bar=False,
-                            is_wireframe=False, opacity=1.0,
+                            is_wireframe=False, opacity=None,
                             subdomains_args=None,
                             rel_text_width=None,
                             filter_names=None, group_names=None,
@@ -385,8 +385,19 @@ class Viewer(Struct):
         names = p_names + c_names
         if only_names is None:
             names = [ii for ii in names if ii[2] not in filter_names]
+
         else:
-            _names = [ii for ii in names if ii[2] in only_names]
+            # Use order of only_names.
+            _names = []
+            aux = [ii[2] for ii in names]
+            for name in only_names:
+                try:
+                    ii = aux.index(name)
+                except ValueError:
+                    output('ignoring nonexistent name: %s' % name)
+                    continue
+                _names.append(names[ii])
+
             if len(_names) != len(only_names):
                 output('warning: some names were not found!')
             if not len(_names):
@@ -590,7 +601,7 @@ class Viewer(Struct):
                 if (kind == 'scalars') or (kind == 'tensors'):
                     lm = mm.scalar_lut_manager
 
-                else: # kind == 'vectors': 
+                else: # kind == 'vectors':
                     lm = mm.vector_lut_manager
 
                 self.scalar_bars.append((family, name, lm))
@@ -668,7 +679,7 @@ class Viewer(Struct):
         This is either call_mlab() or call_empty().
         """
         pass
-            
+
     def call_empty(self, *args, **kwargs):
         pass
 
@@ -678,8 +689,8 @@ class Viewer(Struct):
                   layout='rowcol', scalar_mode='iso_surface',
                   vector_mode='arrows_norm', rel_scaling=None, clamping=False,
                   ranges=None, is_scalar_bar=False, is_wireframe=False,
-                  opacity=1.0, subdomains_args=None, rel_text_width=None,
-                  fig_filename='view.png', resolution = None,
+                  opacity=None, subdomains_args=None, rel_text_width=None,
+                  fig_filename='view.png', resolution=None,
                   filter_names=None, only_names=None, group_names=None, step=0,
                   anti_aliasing=None, domain_specific=None):
         """
@@ -710,7 +721,7 @@ class Viewer(Struct):
             'row', 'col', 'rowcol', 'colrow'.
         scalar_mode : str
              Mode for plotting scalars and tensor magnitudes, one of
-             'cut_plane', 'iso_surface', 'both'. 
+             'cut_plane', 'iso_surface', 'both'.
         vector_mode : str
              Mode for plotting vectors, one of 'arrows', 'norm', 'arrows_norm',
              'warp_norm'.
@@ -846,6 +857,10 @@ class Viewer(Struct):
         if gui is not None:
             gui.has_several_steps = has_several_steps
 
+        self.reload_source = reload_source = ReloadSource()
+        reload_source._viewer = self
+        reload_source._source = self.file_source
+
         if has_several_steps:
             self.set_step = set_step = SetStep()
             set_step._viewer = self
@@ -855,10 +870,17 @@ class Viewer(Struct):
                     msg='invalid time step! (%d <= %d <= %d)'
                     % (step_range[0], step, step_range[1]))
             set_step.step = step
-            self.file_source.setup_notification(set_step, 'file_changed')
+
+            if self.watch:
+                self.file_source.setup_notification(set_step, 'file_changed')
 
             if gui is not None:
                 gui.set_step = set_step
+
+        else:
+            if self.watch:
+                self.file_source.setup_notification(reload_source,
+                                                    'reload_source')
 
         self.options.update(get_arguments(omit = ['self', 'file_source']))
 
@@ -876,7 +898,7 @@ class Viewer(Struct):
 
         else:
             traits_view = View(
-                Item('scene', editor=SceneEditor(scene_class=MayaviScene), 
+                Item('scene', editor=SceneEditor(scene_class=MayaviScene),
                      show_label=False,
                      width=self.size_hint[0], height=self.size_hint[1],
                      style='custom',
@@ -885,6 +907,7 @@ class Viewer(Struct):
                            show_label=False, style='custom'),
                 ),
                 HGroup(spring,
+                       Item('button_reload', show_label=False),
                        Item('button_view', show_label=False),
                        Item('button_make_snapshots', show_label=False,
                             enabled_when='has_several_steps == True'),
@@ -941,6 +964,29 @@ class SetStep(HasTraits):
 
         self.file_changed = False
 
+class ReloadSource(HasTraits):
+
+    _viewer = Instance(Viewer)
+    _source = Instance(FileSource)
+
+    reload_source = Bool(False)
+
+    def _reload_source_changed(self, old, new):
+        if new == True:
+            ext = os.path.splitext(self._source.filename)[1]
+            if ext == 'vtk':
+                while 1:
+                    # Wait for the file to be completely written.
+                    fd = open(self._source.filename, 'r')
+                    ch = fd.read(1)
+                    fd.close()
+                    if ch == '#':
+                        break
+
+            self._viewer.set_source_filename(self._source.filename)
+
+        self.reload_source = False
+
 def make_animation(filename, view, roll, anim_format, options,
                    reuse_viewer=None):
     output_dir = tempfile.mkdtemp()
@@ -996,11 +1042,10 @@ class ViewerGUI(HasTraits):
     has_several_steps = Bool(False)
     viewer = Instance(Viewer)
     set_step = Instance(SetStep)
+    button_reload = Button('reload')
     button_view = Button('print view')
     button_make_animation = Button('make animation')
     button_make_snapshots = Button('make snapshots')
-
-##     anim_process = Instance(Process)
 
     @on_trait_change('scene.activated')
     def _post_init(self, name, old, new):
@@ -1017,6 +1062,9 @@ class ViewerGUI(HasTraits):
         scene.foreground = fgcolor
         scene.background = bgcolor
 
+    def _button_reload_fired(self):
+        self.viewer.reload_source.reload_source = True
+
     def _button_view_fired(self):
         self.scene.camera.print_traits()
         view = mlab.view()
@@ -1030,21 +1078,6 @@ class ViewerGUI(HasTraits):
     def _button_make_animation_fired(self):
         view = mlab.view()
         roll = mlab.roll()
-
-##         if self.anim_process and self.anim_process.is_alive():
-##             output('terminating previous animation process...')
-##             self.anim_process.terminate()
-##             output('...done')
-
-##         output('starting animation process...')
-##         self.anim_process = Process(target=make_animation,
-##                                     args=(self.viewer.filename,
-##                                           view[:2],
-##                                           roll,
-##                                           Struct(**self.viewer.options)))
-##         self.anim_process.daemon = True
-##         self.anim_process.start()
-##         output('...done')
 
         make_animation(self.viewer.filename,
                        view,

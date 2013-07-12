@@ -115,12 +115,14 @@ def create_bnf(stack):
     _set = Literal('set')
     surface = Literal('surface')
 
-    ident = Word(alphas + '_', alphanums + "_")
+    ident = Word(alphas + '_.', alphanums + '_.')
+    set_name = Word(nums) | ident
 
     function = Word(alphas + '_', alphanums + '_')
     function = Group(function).setParseAction(join_tokens)
 
-    region = Combine(Literal('r.') + Word(alphas + '_', '_' + alphas + nums))
+    region = Combine(Literal('r.') + Word(alphas + '_',
+                                          '_' + alphas + nums + '.'))
     region = Group(Optional(_copy, default='nocopy') + region)
     region.setParseAction(replace('KW_Region', keep=True))
 
@@ -156,9 +158,9 @@ def create_bnf(stack):
               + inumber + rpar.suppress())
     ei2 = Group(element + delimitedList(etuple)).setParseAction(
         replace('E_EI2', keep=True))
-    noset = Group(nodes + _of + _set + (Word(nums) | ident)).setParseAction(
+    noset = Group(nodes + _of + _set + set_name).setParseAction(
         replace('E_NOSET', keep=True))
-    eoset = Group(elements + _of + _set + (Word(nums) | ident)).setParseAction(
+    eoset = Group(elements + _of + _set + set_name).setParseAction(
         replace('E_EOSET', keep=True))
 
     region_expression = Forward()

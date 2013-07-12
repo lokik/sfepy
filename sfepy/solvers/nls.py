@@ -491,7 +491,8 @@ class ScipyBroyden( NonlinearSolver ):
         elif conf.method in ['anderson', 'anderson2']:
             kwargs.update( {'M' : conf.M, 'w0' : conf.w0} )
 
-        if conf.method in ['anderson', 'anderson2', 'broyden', 'broyden2' , 'newton_krylov']:
+        if conf.method in ['anderson', 'anderson2',
+                           'broyden', 'broyden2' , 'newton_krylov']:
             kwargs.update( {'f_tol' : conf.f_tol } )
 
         vec_x = self.solver( fun, vec_x0, **kwargs )

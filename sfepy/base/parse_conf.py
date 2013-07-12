@@ -44,12 +44,12 @@ array_braces = lbrack + array_index + rbrack
 
 def create_bnf(allow_tuple=False, free_word=False):
     word = word_free if free_word else word_strict
-    defs = standard_structs(word)
+    defs = get_standard_type_defs(word)
 
     if allow_tuple:
-       return defs['dict'].inner | defs['tuple'].inner
+        return defs['dict'].inner | defs['tuple'].inner
     else:
-       return defs['dict'].inner
+        return defs['dict'].inner
 
 def list_of(element, *elements):
     for e in elements:
@@ -57,9 +57,7 @@ def list_of(element, *elements):
     lst = delimitedList(element)
     return lst + Optional(Suppress(','))
 
-def standard_structs(word = word_free):
-
-
+def get_standard_type_defs(word):
     tuple_str = Forward()
     list_str = Forward()
     dict_str = Forward()
@@ -74,7 +72,7 @@ def standard_structs(word = word_free):
 
     tuple_str.inner = list_of(list_item)
     tuple_str.inner.setParseAction(cvt_tuple)
-    tuple_str << (Suppress('(') + tuple_str.inner  + Suppress(')'))
+    tuple_str << (lparen + tuple_str.inner + rparen)
 
     list_str.inner = tuple_str.inner.copy()
     list_str.inner.setParseAction(lambda toks: list(toks))

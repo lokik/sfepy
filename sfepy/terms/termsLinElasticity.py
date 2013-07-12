@@ -46,6 +46,8 @@ class LinearElasticTerm(Term):
     name = 'dw_lin_elastic'
     arg_types = (('material', 'virtual', 'state'),
                  ('material', 'parameter_1', 'parameter_2'))
+    arg_shapes = {'material' : 'S, S', 'virtual' : ('D', 'state'),
+                  'state' : 'D', 'parameter_1' : 'D', 'parameter_2' : 'D'}
     modes = ('weak', 'eval')
 ##     symbolic = {'expression': expr,
 ##                 'map' : {'u' : 'state', 'D_sym' : 'material'}}
@@ -95,7 +97,7 @@ class LinearElasticTerm(Term):
 
 class SDLinearElasticTerm(Term):
     r"""
-    Sensitivity analasys of of linear elasticity.
+    Sensitivity analysis of the linear elastic term.
 
     :Definition:
 
@@ -103,7 +105,9 @@ class SDLinearElasticTerm(Term):
         \int_{\Omega} \hat{D}_{ijkl}\ e_{ij}(\ul{v}) e_{kl}(\ul{u})
 
     .. math::
-        \hat{D}_{ijkl} = D_{ijkl}(\nabla \cdot \ul{\Vcal}) - D_{ijkq}{\partial \Vcal_l \over \partial x_q} - D_{iqkl}{\partial \Vcal_j \over \partial x_q}
+        \hat{D}_{ijkl} = D_{ijkl}(\nabla \cdot \ul{\Vcal})
+        - D_{ijkq}{\partial \Vcal_l \over \partial x_q}
+        - D_{iqkl}{\partial \Vcal_j \over \partial x_q}
 
     :Arguments:
         - material    : :math:`D_{ijkl}`
@@ -114,39 +118,24 @@ class SDLinearElasticTerm(Term):
     name = 'd_sd_lin_elastic'
     arg_types = ('material', 'parameter_w', 'parameter_u',
                  'parameter_mesh_velocity')
+    arg_shapes = {'material' : 'S, S',
+                  'parameter_w' : 'D', 'parameter_u' : 'D',
+                  'parameter_mesh_velocity' : 'D'}
     function = terms.d_lin_elastic
 
     @staticmethod
-    def op_dv(vgrad, sym):
+    def op_dv(vgrad):
         nel, nlev, dim, _ = vgrad.shape
-        sd = nm.zeros((nel, nlev, sym, sym), dtype=vgrad.dtype)
+        sd = nm.zeros((nel, nlev, dim**2, dim**2), dtype=vgrad.dtype)
 
         if dim == 2:
-            sd[:,:,0,0] = vgrad[:,:,0,0]
-            sd[:,:,1,1] = vgrad[:,:,1,1]
-            #sd[:,:,2,2] = vgrad[:,:,1,1]
-            #sd[:,:,2,0] = vgrad[:,:,1,0]
-            #sd[:,:,0,2] = vgrad[:,:,0,1]
-            #sd[:,:,2,1] = vgrad[:,:,0,1]
+            sd[:,:,0:2,0:2] = vgrad[:,:]
+            sd[:,:,2:4,2:4] = vgrad[:,:]
 
         elif dim == 3:
-            sd[:,:,0,0] = vgrad[:,:,0,0]
-            sd[:,:,1,1] = vgrad[:,:,1,1]
-            sd[:,:,5,5] = vgrad[:,:,1,1]
-            sd[:,:,2,2] = vgrad[:,:,2,2]
-            sd[:,:,3,3] = vgrad[:,:,2,2]
-            sd[:,:,4,4] = vgrad[:,:,2,2]
-            sd[:,:,5,0] = vgrad[:,:,1,0]
-            sd[:,:,0,5] = vgrad[:,:,0,1]
-            sd[:,:,5,1] = vgrad[:,:,0,1]
-            sd[:,:,4,0] = vgrad[:,:,2,0]
-            sd[:,:,4,2] = vgrad[:,:,0,2]
-            sd[:,:,5,3] = vgrad[:,:,0,2]
-            sd[:,:,3,1] = vgrad[:,:,2,1]
-            sd[:,:,4,5] = vgrad[:,:,2,1]
-            sd[:,:,3,2] = vgrad[:,:,1,2]
-            sd[:,:,5,4] = vgrad[:,:,1,2]
-            # ufff... needs to be checked
+            sd[:,:,0:3,0:3] = vgrad[:,:]
+            sd[:,:,3:6,3:6] = vgrad[:,:]
+            sd[:,:,6:9,6:9] = vgrad[:,:]
         else:
             exit('not yet implemented!')
 
@@ -156,16 +145,27 @@ class SDLinearElasticTerm(Term):
                   mode=None, term_mode=None, diff_var=None, **kwargs):
         vg, _ = self.get_mapping(par_u)
 
-        strain1 = self.get(par_w, 'cauchy_strain')
-        strain2 = self.get(par_u, 'cauchy_strain')
+        grad_w = self.get(par_w, 'grad').transpose((0,1,3,2))
+        grad_u = self.get(par_u, 'grad').transpose((0,1,3,2))
+        nel, nqp, nr, nc = grad_u.shape
+        strain_w = grad_w.reshape((nel, nqp, nr * nc, 1))
+        strain_u = grad_u.reshape((nel, nqp, nr * nc, 1))
+
+        mat_map = {3: nm.array([0, 2, 2, 1]),
+                   6: nm.array([0, 3, 4, 3, 1, 5, 4, 5, 2])}
+
+        mmap = mat_map[mat.shape[-1]]
+        mat_ns = mat[nm.ix_(nm.arange(nel), nm.arange(nqp),
+                            mmap, mmap)]
+
         div_mv = self.get(par_mv, 'div')
         grad_mv = self.get(par_mv, 'grad')
-        opd_mv = self.op_dv(grad_mv, mat.shape[-1])
+        opd_mv = self.op_dv(grad_mv)
 
-        aux = dot_sequences(mat, opd_mv)
-        mat_mv = mat * div_mv - (aux + aux.transpose((0,1,3,2)))
+        aux = dot_sequences(mat_ns, opd_mv)
+        mat_mv = mat_ns * div_mv - (aux + aux.transpose((0,1,3,2)))
 
-        return 1.0, strain1, strain2, mat_mv, vg
+        return 1.0, strain_w, strain_u, mat_mv, vg
 
     def get_eval_shape(self, mat, par_w, par_u, par_mv,
                        mode=None, term_mode=None, diff_var=None, **kwargs):
@@ -192,6 +192,8 @@ class LinearElasticIsotropicTerm(Term):
     """
     name = 'dw_lin_elastic_iso'
     arg_types = ('material_1', 'material_2', 'virtual', 'state')
+    arg_shapes = {'material_1' : '1, 1', 'material_2' : '1, 1',
+                  'virtual' : ('D', 'state'), 'state' : 'D'}
 
     function = staticmethod(terms.dw_lin_elastic_iso)
 
@@ -335,6 +337,8 @@ class LinearPrestressTerm(Term):
     name = 'dw_lin_prestress'
     arg_types = (('material', 'virtual'),
                  ('material', 'parameter'))
+    arg_shapes = {'material' : 'S, 1', 'virtual' : ('D', None),
+                  'parameter' : 'D'}
     modes = ('weak', 'eval')
 
     def check_shapes(self, mat, virtual):
@@ -399,6 +403,8 @@ class LinearStrainFiberTerm(Term):
     """
     name = 'dw_lin_strain_fib'
     arg_types = ('material_1', 'material_2', 'virtual')
+    arg_shapes = {'material_1' : 'S, S', 'material_2' : 'D, 1',
+                  'virtual' : ('D', None)}
 
     function = staticmethod(terms.dw_lin_strain_fib)
 
@@ -447,6 +453,7 @@ class CauchyStrainTerm(Term):
     """
     name = 'ev_cauchy_strain'
     arg_types = ('parameter',)
+    arg_shapes = {'parameter' : 'D'}
 
     @staticmethod
     def function(out, strain, vg, fmode):
@@ -533,6 +540,7 @@ class CauchyStressTerm(Term):
     """
     name = 'ev_cauchy_stress'
     arg_types = ('material', 'parameter')
+    arg_shapes = {'material' : 'S, S', 'parameter' : 'D'}
 
     @staticmethod
     def function(out, coef, strain, mat, vg, fmode):
@@ -598,6 +606,7 @@ class CauchyStressTHTerm(CauchyStressTerm, THTerm):
     """
     name = 'ev_cauchy_stress_th'
     arg_types = ('ts', 'material', 'parameter')
+    arg_shapes = {}
 
     def get_fargs(self, ts, mats, state,
                   mode=None, term_mode=None, diff_var=None, **kwargs):
@@ -656,6 +665,7 @@ class CauchyStressETHTerm(CauchyStressTerm, ETHTerm):
     """
     name = 'ev_cauchy_stress_eth'
     arg_types = ('ts', 'material_0', 'material_1', 'parameter')
+    arg_shapes = {}
 
     def get_fargs(self, ts, mat0, mat1, state,
                   mode=None, term_mode=None, diff_var=None, **kwargs):
