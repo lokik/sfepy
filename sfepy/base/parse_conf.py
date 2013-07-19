@@ -57,7 +57,7 @@ def list_of(element, *elements):
     lst = delimitedList(element)
     return lst + Optional(Suppress(','))
 
-def get_standard_type_defs(word):
+def get_standard_type_defs(word = word_free):
     tuple_str = Forward()
     list_str = Forward()
     dict_str = Forward()
@@ -90,7 +90,7 @@ def get_standard_type_defs(word):
             }
 
 def list_dict():
-    defs = standard_structs()
+    defs = get_standard_type_defs()
     i = defs['list_item']
     arg = i.copy()
     arg.setParseAction(lambda t: (t[0],))
