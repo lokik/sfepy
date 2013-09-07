@@ -242,7 +242,7 @@ def dict_from_string(string):
     if isinstance(string, dict):
         return string
 
-    parser = create_bnf()
+    parser = create_bnf(free_word = True)
 
     out = {}
     for r in parser.parseString(string, parseAll=True):
