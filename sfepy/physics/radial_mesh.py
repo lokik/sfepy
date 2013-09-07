@@ -1,8 +1,12 @@
-import numpy as np
 import math
+from sfepy.physics.basis import SympyFce, Basis
 from scipy.integrate import simps, cumtrapz
 from sfepy.linalg import norm_l2_along_axis
 import scipy.interpolate as si
+import scipy
+import numpy as np
+import copy
+import types
 
 class RadialVector(object):
 
@@ -10,27 +14,47 @@ class RadialVector(object):
     @staticmethod
     def from_file(file):
         array = np.genfromtxt(file)
-        mesh = ExplicitRadialMesh(array[:, 0])
+        mesh = RadialMesh(array[:, 0])
         return [RadialVector(mesh, array[:, r])
                 for r in xrange(1, array.shape[1])]
 
+    def brother(self, values):
+        return RadialVector(self.mesh, values)
+
     def __repr__(self):
         return self.pretty(10)
-        
+
+    def __abs__(self):
+        return RadialVector(self.mesh, np.abs(self.values))
+
+    def __pow__(self, exponent):
+        return RadialVector(self.mesh, self.values ** exponent)
+
     def __eq__(self,  vector):
         if isinstance(vector, RadialVector):
-           if vector.mesh == self.mesh: 
+           if vector.mesh == self.mesh:
               return (vector.values == self.values).all()
            else:
               return (vector.interpolate(self.mesh.coors) == self.values).all()
         else:
            vector = np.asarray(vector)
            return vector.shape == self.values.shape and (vector == self.values).all()
-              
+
+    def scale(self, scale = None, shift = None):
+        self.clear_cache()
+        self.mesh = self.mesh.copy()
+        self.mesh.scale(scale, shift)
+        self.parent_mesh = None
+        self.midpoint_mesh = None
+
+    def copy(self):
+        out = copy.copy(self)
+        out.values = out.values.copy()
+        return out
 
     def pretty(self, values):
-        """ Pretty print <values> values of vector 
-        @param int number of values printed 
+        """ Pretty print <values> values of vector
+        @param int number of values printed
         """
         size = self.values.size
         if values > size:
@@ -47,17 +71,22 @@ class RadialVector(object):
 
     def __init__(self, mesh, values=None):
         if not isinstance(mesh, RadialMesh):
-            mesh = ExplicitRadialMesh(mesh)
+            mesh = RadialMesh(mesh)
         self.mesh = mesh
+        if isinstance(values, types.FunctionType) or hasattr(values, '__call__'):
+           values = values(mesh.coors)
         self.values = (np.asarray(values, np.float) if values
                        is not None else np.zeros(self.mesh.size))
+        self.clear_cache()
+
+    def clear_cache(self):
+        self.derivate_cache = {}
+        self.interpolator = {}
         self.extrapolated = None
         self.precision = None
         self.result_precision = None
         self.running = None
-        self.derivate_cache = {}
-        self.interpolator = {}
-        
+
     def running_mean(self):
         """ Smooths vector """
         if self.running is None:
@@ -70,8 +99,8 @@ class RadialVector(object):
                                                       - wsize]
         return self.running
 
-    def integrate(self, factor = 'spherical'):
-        """ Compute integral of vector with given integral factor. 
+    def integrate(self, factor = None):
+        """ Compute integral of vector with given integral factor.
             See RadialMesh.integrate for possible factors.
         """
         return self.mesh.integrate(self.values, factor)
@@ -80,18 +109,15 @@ class RadialVector(object):
         """ Compute (not-spherical) integral of vector """
         return self.mesh.linear_integrate(self.values)
 
-    def linear_integral(self, from_zero=False):
-        """ Compute running integral of vector. See mesh.linear_integral """
-        return self.mesh.linear_integral(self.values, from_zero)
 
     def get_extrapolated(self, precision=0.0001, grade=10, attempts=10):
         """ Try to smooth and extrapolate curve trough vector points with given precision,
         if can't be done, it raise the precision
         @param precision int max error in points
         @param grade int grade of spline
-        @param attempts max number of tries to gues the precision 
+        @param attempts max number of tries to gues the precision
         """
-        
+
         if precision is None:
             return si.InterpolatedUnivariateSpline(self.mesh.get_coors(),
                                                    self.values, k=5)
@@ -120,7 +146,7 @@ class RadialVector(object):
         if at is None:
             at = self.mesh
         elif not isinstance(at, RadialMesh):
-            at = ExplicitRadialMesh(at)
+            at = RadialMesh(at)
         val = self.get_extrapolated(precision, grade, attempts)(at.coors)
         return RadialVector(at, val)
 
@@ -129,66 +155,90 @@ class RadialVector(object):
         if at is None:
            at = self.mesh
         elif not isinstance(at, RadialMesh):
-            at = ExplicitRadialMesh(at)
+            at = RadialMesh(at)
         val = self.get_extrapolated(precision=0.0001, grade=10,
                                     attempts=10)(at.coors, 1)
         return RadialVector(at, val)
 
-    def derivation(self, at = None, factor = 'spherical', force=False, from_zero = False):
-        """ Return radial vector of derivatives and if 'at' is not none return derivatives 
-            in given points 
-            Can derivate with respect to given integral factor, see mesh.integrate 
+    def derivation(self, factor = None, from_zero = False, at = None, force=False):
+        """ Return radial vector of derivatives and if 'at' is not none return derivatives
+            in given points
+            Can derivate with respect to given integral factor, see mesh.integrate
         """
-        key = factor + str(from_zero)
+        key = (factor or self.mesh.integral_factor) + str(from_zero)
         if not self.derivate_cache.has_key(key) or force:
            self.derivate_cache[key] = RadialVector(self.mesh, self.mesh.derivation(self.values, factor, from_zero))
         if at is not None:
            return self.derivate_cache[key].interpolate(at)
         return self.derivate_cache[key]
-        
-    def linear_derivation(self, at=None, force = False, from_zero = False):
-        """ Return radial vector of derivatives and if 'at' is not none return derivatives 
+
+    def linear_second_derivation(self,  from_zero = False, at = None):
+        """
+        Return vector from second derivations of given vector
+        .. math::
+        """
+        return self.second_derivation( 'linear', from_zero, at)
+
+    def second_derivation(self, factor = None, from_zero = False, at = None):
+        """
+        Return vector from second derivations of given vector that was integrated using given integral factor
+        .. math::
+        """
+        return self.mesh.second_derivation(self, factor, from_zero, at)
+
+    def linear_derivation(self, from_zero = False, at=None, force = False):
+        """ Return radial vector of derivatives and if 'at' is not none return derivatives
             in given points.
             Linear derivation (no integration factor).
         """
         return self.derivation(at = at, factor = 'linear', force = force, from_zero = from_zero)
 
-    def slice(self, x, y):
+    def slice(self, x, y=None):
         """ Return slice of vector, given by two indexes (start, stop+1) or
             float bounds <a, b) """
         if isinstance(x, float):
-            x = self.get_index(x)
+            x = self.mesh.get_index(x)
+        elif x is None:
+            x=0
         if isinstance(y, float):
-            y = self.get_index(y)
+            y = self.mesh.get_index(y)
+        elif y is None:
+            y = self.mesh.size
         return RadialVector(self.mesh.slice(x, y), self.values[x:y])
-    
-    def interpolate(self, x, kind = None, centre = None):
+
+    def at(self, x, out=None):
+        return self.interpolate(x, out = out)
+
+    def interpolate(self, x, kind = None, centre = None, out=None):
         """ Return values interpolated in given coordinates x.
-        Kind of interpolation can be None for linear interpolation or 
+        Kind of interpolation can be None for linear interpolation or
         some of scipy.interpolate.interp1d kinds.
-        
+
         Caches computed interpolator for non-linear cases.
-        If centre is not None, coordinates are 3d and the resulting coordinates 
+        If centre is not None, coordinates are 3d and the resulting coordinates
         are the distances from the given centre.
         """
         if kind is None:
-           return self.mesh.interpolate(self.values, x, centre, kind) 
+           return self.mesh.interpolate(self.values, x, centre, kind, out)
         if not self.interpolator.has_key(kind):
            self.interpolator[kind]=self.mesh.interpolator(self.values, kind)
         if(centre is not None):
            if centre.any():
               x = x - centre
            x = norm_l2_along_axis(x, axis=1)
+        if out:
+           out[:] = self.interpolator[kind](x)
+           return out
         return self.interpolator[kind](x)
 
-    def interpolate_3d(self, x, kind = None, centre = None):
+    def interpolate_3d(self, x, kind = None, centre = None, out = None):
         """ Return interpolated values at points given by 3d coordinates and centre """
         if centre is None:
           centre = np.zeros((3,))
-        return self.interpolate(x, kind, centre)    
-        
+        return self.interpolate(x, kind, centre, out)
+
     def output_vector(self, filename=None):
-        """ Save vector in two columns COORS VALUES"""
+        """ Save vector in two columns COORS VALUES """
         return self.mesh.output_vector(self, filename)
 
     @staticmethod
@@ -196,39 +246,129 @@ class RadialVector(object):
         mesh = RadialMesh.merge([v.mesh for v in vectors])
         return [mesh.sparse_vector(v) for v in vectors]
 
-    def _get_values_from_object(self, object):
-        return (object.values if isinstance(object, RadialVector) else object)
+    def _get_values_from_object(self, data):
+        return data if isinstance(data, np.ndarray) else \
+               data(self.mesh) if isinstance(data, RadialVector) else \
+               data(self.coors) ;
+
+    def __iadd__(self, vector):
+        if(isinstance(vector, (int, float))):
+           self.values += vector
+        else:
+          values = self._get_values_from_object(vector)
+          self.values +=values
 
     def __add__(self, vector):
-        values = self._get_values_from_object(vector)
-        return RadialVector(self.mesh, self.values + values)
+        if(isinstance(vector, (int, float))):
+          return RadialVector(self.mesh, self.values + vector)
+        else:
+          values = self._get_values_from_object(vector)
+          return RadialVector(self.mesh, self.values + values)
+
+    def __isub__(self, vector):
+        if(isinstance(vector, (int, float))):
+           self.values -= vector
+        else:
+          values = self._get_values_from_object(vector)
+          self.values -=values
 
     def __sub__(self, vector):
-        values = self._get_values_from_object(vector)
-        return RadialVector(self.mesh, self.values - values)
+        if(isinstance(vector, (int, float))):
+          return RadialVector(self.mesh, self.values - vector)
+        else:
+          values = self._get_values_from_object(vector)
+          return RadialVector(self.mesh, self.values - values)
+
+    def __radd__(self, vector):
+        if(isinstance(vector, (int, float))):
+           return RadialVector(self.mesh, self.values + vector)
+        else:
+          values = self._get_values_from_object(vector)
+          return RadialVector(self.mesh, self.values + values)
+
+    def __rsub__(self, vector):
+        if(isinstance(vector, (int, float))):
+           return RadialVector(self.mesh, vector - self.values)
+        else:
+          values = self._get_values_from_object(vector)
+          return RadialVector(self.mesh, values - self.values)
 
     def __mul__(self, vector):
-        values = self._get_values_from_object(vector)
-        return RadialVector(self.mesh, self.values * values)
+        if(isinstance(vector, (int, float))):
+           return RadialVector(self.mesh, self.values * vector)
+        else:
+          values = self._get_values_from_object(vector)
+          return RadialVector(self.mesh, self.values * values)
+
+    def __rmul__(self, vector):
+        if(isinstance(vector, (int, float))):
+           return RadialVector(self.mesh, self.values * vector)
+        else:
+          values = self._get_values_from_object(vector)
+          return RadialVector(self.mesh, self.values * values)
+
+    def __imul__(self, vector):
+        if(isinstance(vector, (int, float))):
+           self.values *= vector
+        else:
+           values = self._get_values_from_object(vector)
+           self.values *=values
 
     def __div__(self, vector):
-        values = self._get_values_from_object(vector)
-        return RadialVector(self.mesh, self.values / values)
+        if(isinstance(vector, (int, float))):
+           return RadialVector(self.mesh, self.values / vector)
+        else:
+          values = self._get_values_from_object(vector)
+          return RadialVector(self.mesh, self.values / values)
+
+    def __idiv__(self, vector):
+        if(isinstance(vector, (int, float))):
+          self.values /= vector
+        else:
+          values = self._get_values_from_object(vector)
+          self.values /=values
+
+    def __ipow__(self, vector):
+        if(isinstance(vector, (int, float))):
+           self.values **= vector
+        else:
+          self.values = self._get_values_from_object(vector)
+          self.values **=vector
+
+    def __rdiv__(self, vector):
+        if(isinstance(vector, (int, float))):
+           return RadialVector(self.mesh, vector / self.values)
+        else:
+          values = self._get_values_from_object(vector)
+          return RadialVector(self.mesh, values / self.values)
+
+    def __invert__(self):
+        return self.derivation()
 
     def __getitem__(self, r):
         return self.values[r]
 
-    def plot(self):
+    def plot(self, range=None, other=None):
         """ Plot vector using given shell script """
-        return self.mesh.plot(self)
+        vect = [self]
+        if other:
+          if isinstance(other, list):
+             vect = other.copy().append(self)
+          else:
+             vect = [ self, other ]
+        else:
+          vect = self
+        return self.mesh.plot(vect, range=range)
 
     def get_coors(self):
         """ Return mesh coors """
         return self.mesh.coors
 
-    def __call__(self, name, *args, **kwargs):
+    def __call__(self, at):
         """ Call numpy functions on vector """
-        return getattr(self.values, name)(*args, **kwargs)
+        if self.mesh == at or at is self.mesh.coors:
+           return self.values
+        return self.interpolate(at)
 
     def __getattr__(self, name):
         """ Read numpy array attributes """
@@ -237,7 +377,7 @@ class RadialVector(object):
     def partition(self, block=None):
         """
         Split again vector joined from more radial vectors.
-        The mesh.coors should look like a saw, it's divided to single tooths.  
+        The mesh.coors should look like a saw, it's divided to single tooths.
         """
         meshes = self.mesh.partition()
         out = []
@@ -249,56 +389,214 @@ class RadialVector(object):
         if block is not None:
            out=out[block]
         return out
-    
-    def dot(self, vector, factor='spherical'):
+
+    def norm(self, factor = None):
+        return math.sqrt(self.dot(self, factor))
+
+    def dot(self, vector, factor = None):
         """ Return dot product with given vector using given integral factor """
         return self.mesh.dot(self.values, vector, factor)
-            
-    def v_dot(self, a, b, factor='spherical'):
-        """ Return dot product of two vectors in self-norm using given integral factor 
+
+    def v_dot(self, a, b, factor = None):
+        """ Return dot product of two vectors in self-norm using given integral factor
             .. math::
-               (a, b)_{vector} = \int a * (b * vector)' * factor dx 
+               (a, b)_{vector} = \int a * (b * vector)' * factor dx
         """
         return self.mesh.dot(a, self.values*b, factor)
-        
-    def integral(self, factor = 'spherical', from_zero=False):
+
+    def integral(self, factor = None, from_zero=False):
         return self.mesh.integral(self.values, factor, from_zero)
-        
+
     def linear_integral(self, from_zero=False):
+        """ Compute running integral of vector. See mesh.linear_integral """
         return self.mesh.integral(self.values, 'linear', from_zero)
 
-class RadialMesh(object):
+    def normalize(self, factor = None):
+        self.values /= self.norm(factor)
+        return self
+
+    def bind_to_zero(self, start, end, base = None, factor = 'linear', endpoint = (0.0,0.0,0.0), eps = 0.9):
+        start, startr = self.mesh.get_index_r(start)
+        end, endr = self.mesh.get_index_r(end)
+
+        if base == None:
+           base = [
+                   SympyFce("x*x*exp(-x*x)",         1/startr),
+                   SympyFce("x*x*x*x*exp(-x*x)",     1/startr),
+                   SympyFce("x*x*x*x*exp(-x*x*x*x)", 1/startr),
+                   SympyFce("x*x*exp(-x*x)",         1/endr),
+                   SympyFce("x*x*x*x * exp(-x*x)",     1/endr),
+                   SympyFce("x*x*x*x*exp(-x*x*x*x)", 1/endr)
+                  ]
+        if not(isinstance(base, Basis)):
+           base = Basis(base)
+
+        dim =base.size
+        mat = np.empty((dim, dim))
+        right = np.empty((dim))
+        d1 = self.derivation(factor = factor)
+        d2 = self.second_derivation(factor = factor)
+        point = startr
+
+        for x in xrange(dim):
+            here = point
+            if int(x / 3) == 0:
+               right[x] = endpoint[x]
+               here = endr
+            elif x % 3 ==0:
+               right[x] = self(point)
+            elif x % 3 ==1:
+               right[x] = d1(point)
+            elif x % 3 ==2:
+               right[x] = d2(point)
+               point = startr * eps if point == startr else (startr + point)/2
+            for y in xrange(dim):
+                mat[x,y] = base[y].n_derivation(x % 3, here)
+
+
+        par=scipy.linalg.solve(mat, right)
+        scaled = base.scale(par)
+        self.values[start:end] = scaled(self.mesh[start:end])
+        self.values[end:] = 0.0
+        return self
+
+
+    def smooth_to_zero_from(self, start, end):
+        """
+        Modify its values, so it wil begin fall to zero at start
+        and from end they will be zero.
+        """
+        start, startr = self.mesh.get_index_r(start)
+        end, endr = self.mesh.get_index_r(end)
+        value = self[start]
+        inter = self.slice(0, end)
+
+        data = np.array([[value,
+                          inter.extrapolated_derivatives(startr,
+                                                         precision=None).values],
+                         [0.0, 0.0]])
+
+        curve = si.PiecewisePolynomial([startr, endr], data)
+        coors = self.mesh.get_coors()
+
+        self.values[start:end + 1] = curve(coors[start:end + 1])
+        self.values[end + 1:] = 0.0
+        return self
+
+    def smooth_to_zero(self, at_radius, min_ratio = 0.6, smoothness = 0.9):
+        rci = self.mesh.get_index(at_radius)
+        avalues = np.absolute(self.values)
+
+        compare_with = 1.0e200
+        count = 0
+
+        mini = self.mesh.get_index(at_radius * min_ratio)
+        for i in xrange(rci, mini, -1):
+            if avalues[i] >= compare_with:
+                count += 1
+
+            else:
+                if count >= 4:
+                    i = i + 1
+                    break
+                count = 0
+                compare_with = avalues[i]
+                sloopstart = i
+
+        if sloopstart <= mini + 1:
+            sloopstart = self.mesh.get_index(at_radius * 0.95)
+            i = self.mesh.get_index(at_radius * 0.95 * smoothness)
+
+        else:
+            limit = self.mesh.get_r(sloopstart) * smoothness
+            if limit > self.mesh.get_r(i):
+                i = self.mesh.get_index(limit)
+
+        return self.smooth_to_zero_from(i, rci)
+
+
+
+
+class BaseRadialMesh(object):
     """
     Radial mesh.
     """
-    def integral_factor(self, vector, factor):
+
+    def _get_values_from_object(self, data):
+        """
+        return values used for computation, allow use RadialVector or lambda function as input
+        in funcitons
+        """
+        return data if isinstance(data, np.ndarray) else \
+               data(self) if isinstance(data, RadialVector) else \
+               data(self.coors) ;
+
+    def mul_integral_factor(self, vector, factor):
         """
         return values multiplied by given integral factor
-        It can be 
+        It can be
         'linear' - no integral factor
         'spehrical' - spherical integral factor: 4*math.pi * r**2
         'r2' - physics spherical integral factor (used e.g. with spherical harmonics): r**2
         """
-        if isinstance(vector, RadialVector):
-           vector = vector.values
+        vector = self._get_values_from_object(vector)
+        factor = factor or self.integral_factor
         if factor == 'r2':
            return vector * self.coors ** 2
         elif factor == 'linear':
            return vector
         elif factor == 'spherical' or True:
            return vector * self.coors ** 2 * 4 * math.pi
-        raise Exception('Unknown integral factor: %s' % norm)        
- 
+        raise Exception('Unknown integral factor: %s' % factor)
 
-    
-    def derivation(self, vector, factor = 'spherical', from_zero = False, at = None):
+    def scale(self, scale=None, shift = None):
+        if scale:
+           self.coors *=scale
+        if shift:
+           self.coors +=shift
+
+    def linear_second_derivation(self, vector,  from_zero = False, at = None):
+        """
+        Return vector from second derivations of given vector
+        .. math::
+        """
+        return self.second_derivation(self, vector, 'linear', from_zero, at)
+
+    def second_derivation(self, vector, factor = None, from_zero = False, at = None):
+        """
+        Return vector from second derivations of given vector that was integrated using given integral factor
+        .. math::
+        """
+        vector = self.mul_integral_factor(vector, factor)
+
+        spaces = np.convolve(self.coors, [1, -1])[1:-1]
+        diffs = np.convolve(vector, [1, -1])[1:-1]
+
+        out = RadialVector(self, np.zeros(self.size))
+        #             f1       * (x2 / x1) +                      f2
+        out.values[1:-1] =  diffs[:-1]  * (spaces[1:] / spaces[:-1]) - diffs[1:]
+        out.values[1:-1] /= spaces[1:]*spaces[1:] + spaces[1:]*spaces[:-1]
+        out.values[1:-1] *= -2
+        #border
+        if(from_zero):
+          out.values[0] =  vector[0] * spaces[0] / self.coors[0] - diffs[0]
+          out.values[0] /= -2*spaces[0] * spaces[0] + spaces[0] * self.coors[0]
+        else:
+          out.values[0]= (diffs[1] / spaces[1] - diffs[0] / spaces[0] ) / (spaces[1] )
+        out.values[-1]= -(diffs[-2] / spaces[-2] - diffs[-1] / spaces[-1] ) / (spaces[-1] )
+
+        if at:
+           return out.interpolate(at)
+        return out
+
+    def derivation(self, vector, factor = None, from_zero = False, at = None):
         """
         Return vector from derivations of given vector that was integrated using given integral factor
         .. math::
-          f_n = \frac{v(x_n - \epsilon) - v(x_n + \epsilon)}{2 * \epsilon * factor} 
+          f_n = \frac{v(x_n - \epsilon) - v(x_n + \epsilon)}{2 * \epsilon * factor}
         """
-        vector = self.integral_factor(vector, factor)
-        spaces = np.convolve(self.coors, [1, -1])[1:-1]        
+        vector = self.mul_integral_factor(vector, factor)
+        spaces = np.convolve(self.coors, [1, -1])[1:-1]
         diffs = np.convolve(vector, [1, -1])[1:-1]
         diffs /= spaces
         out = np.convolve(diffs, [0.5, 0.5])
@@ -318,20 +616,20 @@ class RadialMesh(object):
         """
         return self.derivation(vector, factor = 'linear',  from_zero = False, at = at)
 
-    def interpolate_3d(self, potential, coors, centre=None, kind=None):
+    def interpolate_3d(self, potential, coors, centre=None, kind=None, out=None):
         """
         Interpolate values in points giving by 3d coordinates with respect to given centre.
-        """        
+        """
         if centre is None:
            centre = np.zeros((3,))
-        return self.interpolate(potential, coors, centre, kind)        
+        return self.interpolate(potential, coors, centre, kind, out)
 
-    def integrate(self, vector, factor = 'spherical'):
+    def integrate(self, vector, factor = None):
         """
         .. math::
            \int f(r) r^2 dr
         """
-        v = self.integral_factor(vector, factor)
+        v = self.mul_integral_factor(vector, factor)
         return simps(v, self.coors)
 
     def linear_integrate(self, vector):
@@ -340,19 +638,19 @@ class RadialMesh(object):
            \int f(r) dr
         """
         return simps(vector, self.coors)
-        
+
     def get_coors(self):
         return self.coors
 
-    def integral(self, vector, factor = 'spherical', from_zero=False):
+    def integral(self, vector, factor = None, from_zero=False):
         """
         .. math::
           a_n = \int_{r_0}^{r_n} f(r) * integral_factor dr
 
         from_zero starts to integrate from zero, instead of starting between
         the first two points
-        """        
-        v = self.integral_factor(vector, factor)
+        """
+        v = self.mul_integral_factor(vector, factor)
         r = self.coors
         if from_zero:
             v = cumtrapz(vector, r, initial=0) + v[0] / 2 * max(0.0, r[0])
@@ -361,7 +659,7 @@ class RadialMesh(object):
             v = cumtrapz(vector, r)
             r = r[1:]
             return RadialVector(r, v)
-        
+
     def linear_integral(self, vector, from_zero=False):
         """
         .. math::
@@ -371,29 +669,30 @@ class RadialMesh(object):
         the first two points
         """
         return self.integral(vector, 'linear', from_zero)
-        
 
-    def dot(self, vector_a, vector_b, factor='spherical'):
+
+    def dot(self, vector_a, vector_b, factor= None):
         """
         Dot product with respect to given integral factor (see RadialMesh.integral_factor)
         .. math::
            \int f(r) g(r) factor r^2 dr
         """
-        
-        if isinstance(vector_a, RadialVector):
-           vector_a=vector_a.values
-        if isinstance(vector_b, RadialVector):
-           vector_b=vector_b.values
+        vector_a=self._get_values_from_object(vector_a)
+        vector_b=self._get_values_from_object(vector_b)
         return self.integrate(vector_a * vector_b, factor)
 
-    def norm(self, vector, factor = 'spherical'):
+    def norm(self, vector, factor = None):
         """
-        L2 norm with respect to given integral factor (see RadialMesh.integral_factor)
-        
+        L2 v norm with respect to given integral factor (see RadialMesh.integral_factor)
+
         .. math::
            \sqrt(\int f(r) f(r) factor r^2 dr)
         """
         return np.sqrt(self.dot(vector, vector, factor))
+
+    def self_scalar_product(self, vec_a, vec_b):
+        return self.dot(self * vec_a, vec_b)
+
 
     def output_vector(self, vector, filename=None):
         """
@@ -401,39 +700,47 @@ class RadialMesh(object):
         Output format
         corrs[0] v[0]
         corrs[1] v[1]
-        etc... or 
+        etc... or
         corrs[0] v0[0] v1[0]] ...
-        corrs[1] v0[1] v1[1]] ...        
+        corrs[1] v0[1] v1[1]] ...
         """
         if filename is None:
             import sys
             filename = sys.stdout
         if isinstance(vector, RadialVector):
             vector = [vector]
-        if isinstance(vector[0], RadialVector):
-            vector = [v.values for v in vector]
-        if isinstance(vector, list):
+
+        if isinstance(vector, (list, tuple)):
+          vector = [ v.values if isinstance(v, RadialVector) else v for v in vector ]
           vector = np.vstack([self.coors] + vector)
         else:
           vector = np.vstack([self.coors, vector])
         np.savetxt(filename, vector.T)
 
-    def plot(self, vector, cmd='plot'):
+    def plot(self, vector, cmd='plot', range=None):
         """ Plot given vectors using given shell script"""
         import tempfile
         import os
+        if range:
+           if isinstance(range, (tuple, list)):
+              range = '%f:%f' % range
+           else:
+              range.replace(",",":")
+           range='-r' + range
+        else:
+           range=''
         fhandle, fname = tempfile.mkstemp()
         fil = os.fdopen(fhandle, 'w')
         self.output_vector(vector, fil)
         fil.close()
-        os.system('%s %s' % (cmd, fname))
+        os.system('%s %s %s' % (cmd, fname, range))
         os.remove(fname)
 
     @staticmethod
     def merge(meshes):
         """ Merge more radial meshes to one """
         merged = np.concatenate(tuple(m.coors for m in meshes))
-        return ExplicitRadialMesh(np.unique(merged))
+        return RadialMesh(np.unique(merged))
 
     def intervals(self):
         """ Return distances between coors """
@@ -441,14 +748,73 @@ class RadialMesh(object):
 
     def __eq__(self, mesh):
         if mesh is self: return True
-        return mesh.coors == self.coors 
+        return mesh.coors == self.coors
 
-class ExplicitRadialMesh(RadialMesh):
+    def __getitem__(self, i):
+        return self.coors[i]
+
+    def orthogonalize(self, vectors, scalar_product = None, factor=None, reortogonalization = 0):
+      """ scalar product can be either function that evaluate scalar product of two numpy arrays
+          or radial vector - in the second case the scalar product is the standard B-product and
+          the B-orthogonalisation is performed
+      """
+      if not isinstance(vectors, np.ndarray):
+        vectors = [ self._get_values_from_object(v) for v in vectors ]
+      c_coef = np.ones(len(vectors), dtype=np.double)
+      vorto = np.empty( (len(vectors), self.size) )
+
+      orto = np.empty( (len(vectors), self.size) )
+      if scalar_product is None or isinstance(scalar_product, RadialVector):
+         def_norm = True
+      else:
+         def_norm = False
+
+      for reorto in xrange(0, reortogonalization+1):
+          for r in xrange(0, len(orto)):
+                orto[r] = vectors[r]
+                base = orto[r]
+                for t in xrange(0, r):
+                    if def_norm:
+                       base -= orto[t] * c_coef[t] * self.dot(base, vorto[t], factor = factor)
+                    else:
+                       base -= orto[t] * c_coef[t] * scalar_product(base, orto[t])
+                if def_norm:
+                   if scalar_product:
+                      vbase = scalar_product * base
+                   else:
+                      vbase = base
+                   scale = self.dot(base, vbase, factor = factor)
+                else:
+                   scale = scalar_product(base, base)
+                if scale < 0:
+                    c_coef[r] = -1
+                    scale = -scale
+                scale = np.sqrt(scale)
+                orto[r] = base / scale
+                if def_norm:
+                   vorto[r] = vbase / scale
+      vec = range(len(vectors))
+      vvec = range(len(vectors))
+      for i in xrange(len(vectors)):
+        vec[i] = RadialVector(self, orto[i])
+        if def_norm:
+           vvec[i] = RadialVector(self, vorto[i])
+        else:
+           vvec[i] = vec[i]
+      return vec, vvec, c_coef
+
+class RadialMesh(BaseRadialMesh):
     """   Radial mesh given by explicit mesh point coordinates   """
-    def __init__(self, coors):
+    def __init__(self, coors, factor = 'spherical'):
         self.coors = np.asarray(coors)
         self.midpointMesh = {}
         self.parentMesh = None
+        self.integral_factor = factor
+
+    def copy(self):
+        out = copy.copy(self)
+        out.coors= self.coors.copy()
+        return out
 
     @property
     def shape(self):
@@ -457,6 +823,11 @@ class ExplicitRadialMesh(RadialMesh):
     @property
     def size(self):
         return self.coors.size
+
+    def get_index_r(self, value):
+        if isinstance(value, int):
+           return value, self.get_r(value)
+        return self.get_index(value), value
 
     def get_coors(self):
         return self.coors
@@ -489,16 +860,21 @@ class ExplicitRadialMesh(RadialMesh):
     def interpolator(self, potential, kind = 'cubic'):
         return si.interp1d(self.coors, potential, kind, copy = False, bounds_error = False, fill_value = potential[-1])
 
-    def interpolate(self, potential, r , centre=None, kind = None):
+    def interpolate(self, potential, r , centre=None, kind = None, out=None):
         if centre is not None:
            if centre.any():
-              coors = coors - centre
-           r = norm_l2_along_axis(coors, axis=1)
+              r = r - centre
+           r = norm_l2_along_axis(r, axis=1)
         if isinstance(potential, RadialVector):
            potential = potential.values
         if kind is None:
-           return np.interp(r, self.coors, potential, right=0)
-        return self.interpolator(potential, kind)(r)
+           val = np.interp(r, self.coors, potential, right=0)
+        else:
+           val = self.interpolator(potential, kind)(r)
+        if out:
+           out[:]=val
+           return out
+        return val
         #return np.interp(r, self.coors, potential, right=0)
 
     def get_midpoint_mesh(self, to=None):
@@ -516,7 +892,7 @@ class ExplicitRadialMesh(RadialMesh):
             coors = self.coors[0:to]
 
         midpoints = np.convolve(coors, [0.5, 0.5], 'valid')
-        midmesh = ExplicitRadialMesh(midpoints)
+        midmesh = RadialMesh(midpoints)
         self.midpointMesh[to] = midmesh
         midmesh.parentMesh = self
         return midmesh
@@ -529,7 +905,7 @@ class ExplicitRadialMesh(RadialMesh):
             x = self.get_index(x)
         if isinstance(y, float):
             y = self.get_index(y)
-        return ExplicitRadialMesh(self.coors[x:y])
+        return RadialMesh(self.coors[x:y])
 
     def sparse_vector(self, vector):
         values = np.tile(float('NAN'), self.size)
@@ -539,15 +915,38 @@ class ExplicitRadialMesh(RadialMesh):
 
     def partition(self):
         at = np.where(self.coors[1:]<self.coors[:-1])[0]+1
-        return [ExplicitRadialMesh(v) for v in np.split(self.coors, at)]
+        return [RadialMesh(v) for v in np.split(self.coors, at)]
 
 
-class RadialHyperbolicMesh(ExplicitRadialMesh):
+
+
+
+class BaseParametricMesh(RadialMesh):
+    def __init__(self, params, coors, factor):
+        self.params = params
+        super(BaseParametricMesh, self).__init__(coors, factor)
+
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.params == other.params;
+
+    def __ne__(self, other):
+        return not isinstance(other, self.__class__) or self.params != other.params;
+
+    def __new__(self, *params):
+        """ Parametric meshes are reused so only one is created. Mesh is immutable class."""
+        if not hasattr(self, 'instance_cache'):
+           self.instance_cache = {}
+        hsh = hash(params)
+        if not self.instance_cache.has_key(hsh):
+           self.instance_cache[hsh] = super(BaseParametricMesh, self).__new__(self, *params)
+        return self.instance_cache[hsh]
+
+class HyperbolicMesh(BaseParametricMesh):
     """   Radial hyperbolic mesh given by params, see __init__"""
 
-    def __init__(self, jm, ap=None, size=None, from_zero=False):
+    def __init__(self, jm, ap=None, size=None, from_zero=False, factor='spherical'):
         """
-        If three (jp, ap, size) params is given, mesh has size points at  
+        If three (jp, ap, size) params is given, mesh has size points at
          a(n) = ap * n  / ( jm - n)
         If two params given, mesh has ap points hyperbolicaly distributed over interval
            (0 if from_zero else 1, jm)
@@ -569,4 +968,26 @@ class RadialHyperbolicMesh(ExplicitRadialMesh):
                           dtype=np.float64)
         coors = self.ap * coors / (self.jm - coors)
 
-        super(RadialHyperbolicMesh, self).__init__(np.asfortranarray(coors))
+        super(HyperbolicMesh, self).__init__((self.jm, self.ap, self.size_par, from_zero), np.asfortranarray(coors), factor)
+
+class LogspaceMesh(BaseParametricMesh):
+      def __init__(self, start, stop, num=50, endpoint = True, base = 10, factor='spherical'):
+          super(LogspaceMesh, self).__init__((start, stop, num, endpoint, base), np.logspace(start, stop, num, endpoint, base), factor)
+
+      @staticmethod
+      def create(from_val, to_val, num):
+          if isinstance(num, int):
+             args = (math.log(from_val), math.log(to_val), num, True, math.e)
+          else:
+             lg = math.log(num)
+             count = math.log(to_val / from_val) / lg
+             args =  (math.log(from_val) / lg, math.log(to_val) / lg, count, True, num)
+          return LogspaceMesh(*args)
+
+class EquidistantMesh(BaseParametricMesh):
+    def __init__(self, from_val, to_val, num, factor = 'spherical'):
+        if isinstance(num, float):
+           num = int((to_val - from_val) / num + 1)
+        distance = (to_val - from_val) / (num - 1)
+        super(EquidistantMesh, self).__init__((from_val, to_val, num), np.arange(num) * distance + from_val, factor)
+
