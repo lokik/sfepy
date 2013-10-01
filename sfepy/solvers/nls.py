@@ -453,6 +453,7 @@ class ScipyBroyden( NonlinearSolver ):
                       M=get('M', 5),
                       f_tol=get('f_tol', 6e-6),
                       w0=get('w0', 0.1),
+                      tol_norm = get('tol_norm', lambda x: nm.linalg.norm(x, float('inf'))),
                       verbose=get('verbose', False)) + common
 
     def __init__( self, conf, **kwargs ):
@@ -493,7 +494,7 @@ class ScipyBroyden( NonlinearSolver ):
 
         if conf.method in ['anderson', 'anderson2',
                            'broyden', 'broyden2' , 'newton_krylov']:
-            kwargs.update( {'f_tol' : conf.f_tol } )
+           kwargs.update( {'f_tol' : conf.f_tol, 'tol_norm' : conf.tol_norm } )
 
         vec_x = self.solver( fun, vec_x0, **kwargs )
         vec_x = nm.asarray(vec_x)
