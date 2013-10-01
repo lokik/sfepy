@@ -32,8 +32,12 @@ def ensure_path(filename):
     intermediate directories.
     """
     dirname = os.path.dirname(filename)
-    if dirname and not os.path.exists(dirname):
-        os.makedirs(dirname)
+    if dirname:
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
+
+        if not os.path.isdir(dirname):
+            raise IOError('cannot ensure path for "%s"!' % filename)
 
 def locate_files(pattern, root_dir=os.curdir):
     """
@@ -81,15 +85,16 @@ def edit_filename(filename, prefix='', suffix='', new_ext=None):
     new_filename : str
         The new file name.
     """
+    path, filename = os.path.split(filename)
     base, ext = os.path.splitext(filename)
 
     if new_ext is None:
-        new_filename = base + suffix + ext
+        new_filename = prefix + base + suffix + ext
 
     else:
-        new_filename = base + suffix + new_ext
+        new_filename = prefix + base + suffix + new_ext
 
-    return new_filename
+    return os.path.join(path, new_filename)
 
 def get_print_info(n_step, fill=None):
     """

@@ -90,26 +90,8 @@ def smooth_mesh(mesh, n_iter=4, lam=0.6307, mu=-0.6347,
 
         return coors
 
-    def dets_fast(a):
-        m = a.shape[0]
-        n = a.shape[1]
-        lapack_routine = lapack_lite.dgetrf
-        pivots = nm.zeros((m, n), intc)
-        flags = nm.arange(1, n + 1).reshape(1, -1)
-        for i in xrange(m):
-            tmp = a[i]
-            lapack_routine(n, n, tmp, n, pivots[i], 0)
-        sign = 1. - 2. * (nm.add.reduce(pivots != flags, axis=1) % 2)
-        idx = nm.arange(n)
-        d = a[:, idx, idx]
-        absd = nm.absolute(d)
-        sign *= nm.multiply.reduce(d / absd, axis=1)
-        nm.log(absd, absd)
-        logdet = nm.add.reduce(absd, axis=-1)
-
-        return sign * nm.exp(logdet)
-
     def get_volume(el, nd):
+        from sfepy.linalg.utils import dets_fast
 
         dim = nd.shape[1]
         nnd = el.shape[1]
@@ -127,7 +109,7 @@ def smooth_mesh(mesh, n_iter=4, lam=0.6307, mu=-0.6347,
 
         mtx = nm.ones((nel, dim + 1, dim + 1), dtype=nm.double)
         mtx[:,:,:-1] = nd[el,:]
-        vols = mul * dets_fast(mtx.copy()) # copy() ???
+        vols = mul * dets_fast(mtx.copy())
         vol = vols.sum()
         bc = nm.dot(vols, mtx.sum(1)[:,:-1] / nnd)
 
@@ -140,36 +122,23 @@ def smooth_mesh(mesh, n_iter=4, lam=0.6307, mu=-0.6347,
     output('smoothing...')
     tt = time.clock()
 
-    domain = Domain('mesh', mesh)
-
-    n_nod = mesh.n_nod
-    edges = domain.ed
-
     if weights is None:
+        n_nod = mesh.n_nod
+        domain = Domain('mesh', mesh)
+        cmesh = domain.cmesh
+
         # initiate all vertices as inner - hierarchy = 2
         node_group = nm.ones((n_nod,), dtype=nm.int16) * 2
         # boundary vertices - set hierarchy = 4
         if bconstr:
-            # get "nodes of surface"
-            if domain.fa: # 3D.
-                fa = domain.fa
-            else:
-                fa = domain.ed
-
-            flag = fa.mark_surface_facets()
-            ii = nm.where( flag > 0 )[0]
-            aux = nm.unique(fa.facets[ii])
-            if aux[0] == -1: # Triangular faces have -1 as 4. point.
-                aux = aux[1:]
-
-            node_group[aux] = 4
+            # get "vertices of surface"
+            facets = cmesh.get_surface_facets()
+            f_verts = cmesh.get_incident(0, facets, cmesh.dim - 1)
+            node_group[f_verts] = 4
 
         # generate costs matrix
-        mtx_ed = edges.mtx.tocoo()
-        _, idxs = nm.unique(mtx_ed.row, return_index=True)
-        aux = edges.facets[mtx_ed.col[idxs]]
-        fc1 = aux[:,0]
-        fc2 = aux[:,1]
+        e_verts = cmesh.get_conn(1, 0).indices
+        fc1, fc2 = e_verts[0::2], e_verts[1::2]
         idxs = nm.where(node_group[fc2] >= node_group[fc1])
         rows1 = fc1[idxs]
         cols1 = fc2[idxs]

@@ -97,9 +97,9 @@ variables = {
 }
 
 regions = {
-    'Omega' : ('all', {}),
-    'Bottom' : ('nodes in (z < -0.499)', {}),
-    'Top' : ('nodes in (z > 0.499)', {}),
+    'Omega' : 'all',
+    'Bottom' : ('vertices in (z < -0.499)', 'facet'),
+    'Top' : ('vertices in (z > 0.499)', 'facet'),
 }
 
 ebcs = {
@@ -140,7 +140,7 @@ def main():
 
     from sfepy.fem import MeshIO
     import sfepy.linalg as la
-    from sfepy.mechanics.contact_planes import (ContactPlane, plot_polygon,
+    from sfepy.mechanics.contact_bodies import (ContactPlane, plot_polygon,
                                                 plot_points)
 
     conf_dir = os.path.dirname(__file__)

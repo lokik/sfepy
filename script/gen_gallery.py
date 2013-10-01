@@ -50,6 +50,7 @@ from sfepy.base.ioutils import (ensure_path, locate_files, remove_files,
 from sfepy.postprocess.domain_specific import DomainSpecificPlot
 
 omits = [
+    'vibro_acoustic3d_mid.py',
     'linear_elastic_mM.py',
     'time_poisson_explicit.py',
     '__init__.py',
@@ -87,6 +88,24 @@ custom = {
             'roll' : 111,
         },
     },
+    'acoustics/vibro_acoustic3d.py' : {
+        '_p1' : {
+            'view' : (45.0, 54.7, 1.47, [0.325, 0.1, 0.05]),
+            'roll' : -120,
+        },
+        '_p2' : {
+            'view' : (45.0, 54.7, 1.47, [0.525, 0.1, 0.15]),
+            'roll' : -120,
+        },
+        '_w' : {
+            'view' : (0.0, 0.0, 0.86, [0.315, 0.1, 0.1]),
+            'roll' : 0,
+        },
+        '_g0' : {
+            'view' : (0.0, 0.0, 0.86, [0.315, 0.1, 0.1]),
+            'roll' : 0,
+        },
+    },
     'linear_elasticity/elastic_contact_planes.py' : {
         '' : {
             'is_wireframe' : True,
@@ -97,6 +116,15 @@ custom = {
             'view' : (-82, 47, 2.8, [-0.01, -0.02, -0.02]),
             'roll' : -8.4,
             'opacity' : {'wireframe' : 0.3},
+        },
+    },
+    'navier_stokes/stokes_slip_bc.py' : {
+        '' : {
+            'view' : (-63, 52, 5.2, [-0.001,  0.52, -0.026]),
+            'roll' : -32,
+            'resolution' : (800, 600),
+            'layout' : 'col',
+            'rel_scaling' : 0.1,
         },
     },
 }
@@ -175,9 +203,7 @@ def generate_images(images_dir, examples_dir):
 
     ensure_path(images_dir + os.path.sep)
 
-    view = Viewer('',
-                  output_dir=output_dir,
-                  offscreen=False)
+    view = Viewer('', offscreen=False)
 
     for ex_filename in locate_files('*.py', examples_dir):
         if _omit(ex_filename): continue
@@ -218,8 +244,8 @@ def generate_images(images_dir, examples_dir):
 
                 fname = edit_filename(filename, suffix=suffix)
                 output('displaying results from "%s"' % fname)
-                output('to "%s"...'
-                       % fig_filename.replace(sfepy.data_dir, '')[1:])
+                disp_name = fig_filename.replace(sfepy.data_dir, '')
+                output('to "%s"...' % disp_name.lstrip(os.path.sep))
 
                 view.filename = fname
                 view(scene=view.scene, show=False, is_scalar_bar=True,
@@ -242,7 +268,7 @@ def generate_thumbnails(thumbnails_dir, images_dir, scale=0.3):
     output('generating thumbnails...')
     filenames = glob.glob(os.path.join(images_dir, '*.png'))
     for fig_filename in filenames:
-        ebase = fig_filename.replace(sfepy.data_dir, '')[1:]
+        ebase = fig_filename.replace(sfepy.data_dir, '').lstrip(os.path.sep)
         output('"%s"' % ebase)
 
         base = os.path.basename(fig_filename)
