@@ -64,9 +64,9 @@ class RadialVector(object):
                          dtype=np.int)
         out = 'RadialVector: '
         for x in n[0:-1:1]:
-            out += '%f: %f,  ' % (self.mesh.get_r(x), self.values[x])
+            out += '%f: %g,  ' % (self.mesh.get_r(x), self.values[x])
         x = n[-1]
-        out += '%f: %f' % (self.mesh.get_r(x), self.values[x])
+        out += '%f: %g' % (self.mesh.get_r(x), self.values[x])
         return out
 
     def __init__(self, mesh, values=None):
@@ -764,43 +764,38 @@ class BaseRadialMesh(object):
       vorto = np.empty( (len(vectors), self.size) )
 
       orto = np.empty( (len(vectors), self.size) )
-      if scalar_product is None or isinstance(scalar_product, RadialVector):
-         def_norm = True
+      if scalar_product is None:
+         scalar_product = lambda x,y: self.dot(x,y,factor)
+         projector = False         
+      elif isinstance(scalar_product, RadialVector):
+         projector = scalar_product
+         scalar_product = lambda x,y: self.dot(x,y,factor) 
       else:
-         def_norm = False
-
+         projector = False
+         
       for reorto in xrange(0, reortogonalization+1):
-          for r in xrange(0, len(orto)):
-                orto[r] = vectors[r]
-                base = orto[r]
+          r = 0
+          for s in xrange(0, len(orto)):
+                base = vectors[s]
                 for t in xrange(0, r):
-                    if def_norm:
-                       base -= orto[t] * c_coef[t] * self.dot(base, vorto[t], factor = factor)
-                    else:
-                       base -= orto[t] * c_coef[t] * scalar_product(base, orto[t])
-                if def_norm:
-                   if scalar_product:
-                      vbase = scalar_product * base
-                   else:
-                      vbase = base
-                   scale = self.dot(base, vbase, factor = factor)
-                else:
-                   scale = scalar_product(base, base)
+                    base -= orto[t] * c_coef[t] * scalar_product(base, vorto[t])
+                vbase = projector * base if projector else base
+                scale = scalar_product(base, vbase)
                 if scale < 0:
                     c_coef[r] = -1
                     scale = -scale
+                elif scale == 0.0:
+                    continue
                 scale = np.sqrt(scale)
                 orto[r] = base / scale
-                if def_norm:
+                if projector:
                    vorto[r] = vbase / scale
-      vec = range(len(vectors))
-      vvec = range(len(vectors))
-      for i in xrange(len(vectors)):
+                r+=1
+      vec = range(r)
+      vvec = range(r)
+      for i in xrange(r):
         vec[i] = RadialVector(self, orto[i])
-        if def_norm:
-           vvec[i] = RadialVector(self, vorto[i])
-        else:
-           vvec[i] = vec[i]
+        vvec[i] = RadialVector(self, vorto[i]) if projector else vec[i] 
       return vec, vvec, c_coef
 
 class RadialMesh(BaseRadialMesh):
