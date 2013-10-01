@@ -145,6 +145,8 @@ class BaseSphericalPotential(PotentialBase):
         self.sign = 1.0
 
     def __call__(self, coors):
+        if isinstance(coors, RadialVector):
+           return RadialVector(coors.mesh, coors.values * self(coors.mesh.coors))           
         coors = self.get_distance(coors)
         pot = self.function(coors)
         if self.sign != 1.0:
