@@ -368,6 +368,8 @@ class RadialVector(object):
         """ Call numpy functions on vector """
         if self.mesh == at or at is self.mesh.coors:
            return self.values
+        if isinstance(at, RadialMesh):
+           at = at.coors
         return self.interpolate(at)
 
     def __getattr__(self, name):
