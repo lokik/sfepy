@@ -7,6 +7,7 @@ import scipy
 import numpy as np
 import copy
 import types
+from sfepy.physics.linalg import orthogonalize
 
 class RadialVector(object):
 
@@ -754,51 +755,36 @@ class BaseRadialMesh(object):
 
     def __getitem__(self, i):
         return self.coors[i]
-
-    def orthogonalize(self, vectors, scalar_product = None, factor=None, reortogonalization = 0):
-      """ scalar product can be either function that evaluate scalar product of two numpy arrays
-          or radial vector - in the second case the scalar product is the standard B-product and
-          the B-orthogonalisation is performed
+     
+     
+    def orthogonalize(self, vectors, scalar_product = None, b_operator=None, factor=None, reorthogonalization = 0):
+      """ Orthogonalization of given vectors.
+     
+          Scalar product can be function of two numpy array, or None (then standard scalar
+          product with given integral factor factor is used)
+          If b_operator is not None, then b_operator-scalar product is used and so B-orthogonalization
+          is performed. Operator can be given as radial vector representing local operator.
       """
+ 
       if not isinstance(vectors, np.ndarray):
-        vectors = [ self._get_values_from_object(v) for v in vectors ]
-      c_coef = np.ones(len(vectors), dtype=np.double)
-      vorto = np.empty( (len(vectors), self.size) )
-
-      orto = np.empty( (len(vectors), self.size) )
+          vectors = [ self._get_values_from_object(v) for v in vectors ]
       if scalar_product is None:
          scalar_product = lambda x,y: self.dot(x,y,factor)
-         projector = False         
-      elif isinstance(scalar_product, RadialVector):
-         projector = scalar_product
-         scalar_product = lambda x,y: self.dot(x,y,factor) 
-      else:
-         projector = False
-         
-      for reorto in xrange(0, reortogonalization+1):
-          r = 0
-          for s in xrange(0, len(orto)):
-                base = vectors[s]
-                for t in xrange(0, r):
-                    base -= orto[t] * c_coef[t] * scalar_product(base, vorto[t])
-                vbase = projector * base if projector else base
-                scale = scalar_product(base, vbase)
-                if scale < 0:
-                    c_coef[r] = -1
-                    scale = -scale
-                elif scale == 0.0:
-                    continue
-                scale = np.sqrt(scale)
-                orto[r] = base / scale
-                if projector:
-                   vorto[r] = vbase / scale
-                r+=1
+      if isinstance(b_operator, RadialVector):
+         proj_vector = b_operator
+         b_operator = lambda x: x * proj_vector
+
+      orto, c_coef, vorto = orthogonalize(vectors, scalar_product, b_operator, reorthogonalization)
+      r = len(orto)
       vec = range(r)
       vvec = range(r)
       for i in xrange(r):
         vec[i] = RadialVector(self, orto[i])
-        vvec[i] = RadialVector(self, vorto[i]) if projector else vec[i] 
-      return vec, vvec, c_coef
+        vvec[i] = RadialVector(self, vorto[i]) if b_operator else vec[i] 
+      return vec, c_coef, vvec
+
+
+        
 
 class RadialMesh(BaseRadialMesh):
     """   Radial mesh given by explicit mesh point coordinates   """
