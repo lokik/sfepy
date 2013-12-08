@@ -519,6 +519,66 @@ class RadialVector(object):
 
 
 
+    def piecefit(self, f=None, step=None, minval=None, initial = None):
+      x=self.mesh.coors
+      y=self.values
+      if f is None:
+         f = lambda x,a,b,c,d,e,f:\
+             ((a*x+b)*x+c)*x+d + x*x*np.exp(f*(x-e)**2)
+         f = lambda x,a,b,c,d:\
+             ((a*x+b)*x+c)*x+d
+
+      if minval is None:
+         minval = len(inspect.getargspec(f)[0])
+
+      if step is None:
+         step = (x[-1] - x[0])/len(x) * minval * 4
+
+      out = np.zeros(len(x))
+      halfstep = step / 2
+
+      def aprox(frm, to):
+          tto = to
+          ffr = frm
+          if tto - frm < minval:
+             add = minval - tto + ffr
+             tto += add / 2
+             ffr -= add - add / 2
+          if tto > len(x):
+             s = tto - len(x)
+             tto = len(x)
+             ffr -= s
+          if ffr < 0:
+             tto -= ffr
+             ffr = 0
+          res, _ = curve_fit(f, x[ffr:tto], y[ffr:tto], initial)
+          return f(x[frm:to], *res)
+
+      def find_limit(frm, limit):
+          while frm < len(x) and x[frm] < limit:
+                frm+=1
+          return frm
+      i = 0
+      start = x[0] + halfstep
+      oi = find_limit(i, start)
+      ii = find_limit(i, start+halfstep)
+      out[i:ii] = aprox(i,ii)
+      out[oi:ii] *= (1 - np.abs(start - x[oi:ii]) / halfstep)
+      i = oi
+      while start < x[-1] - step:
+            start += halfstep
+            oi = i
+            i = find_limit(i, start)
+            ii = find_limit(i, start + halfstep)
+            if ii == oi:
+                continue
+            out[oi:ii] += aprox(oi,ii) *  (1 - np.abs(start - x[oi:ii]) / halfstep)
+      start += halfstep
+      ii = find_limit(i, start)
+      vals = aprox(i,len(x))
+      out[i:ii] +=  vals[:ii-i] *  (1 - np.abs(start - x[i:ii]) / halfstep)
+      out[ii:]  = vals[ii-i:]
+      return self.brother(out)
 
 class BaseRadialMesh(object):
     """
