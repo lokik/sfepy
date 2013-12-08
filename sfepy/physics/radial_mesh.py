@@ -7,7 +7,9 @@ import scipy
 import numpy as np
 import copy
 import types
+import inspect
 from sfepy.physics.linalg import orthogonalize
+from scipy.optimize import curve_fit
 
 class RadialVector(object):
 
@@ -19,7 +21,9 @@ class RadialVector(object):
         return [RadialVector(mesh, array[:, r])
                 for r in xrange(1, array.shape[1])]
 
-    def brother(self, values):
+    def brother(self, values = None):
+        if values is None:
+           values = np.zeros_like(self.values)
         return RadialVector(self.mesh, values)
 
     def __repr__(self):
@@ -168,7 +172,7 @@ class RadialVector(object):
         """
         key = (factor or self.mesh.integral_factor) + str(from_zero)
         if not self.derivate_cache.has_key(key) or force:
-           self.derivate_cache[key] = RadialVector(self.mesh, self.mesh.derivation(self.values, factor, from_zero))
+           self.derivate_cache[key] = self.mesh.derivation(self.values, factor, from_zero)
         if at is not None:
            return self.derivate_cache[key].interpolate(at)
         return self.derivate_cache[key]
@@ -349,12 +353,15 @@ class RadialVector(object):
     def __getitem__(self, r):
         return self.values[r]
 
+    def __setitem__(self, r, val):
+        self.values[r] = val
+
     def plot(self, range=None, other=None):
         """ Plot vector using given shell script """
         vect = [self]
         if other:
           if isinstance(other, list):
-             vect = other.copy().append(self)
+             vect = other + [self]
           else:
              vect = [ self, other ]
         else:
@@ -456,7 +463,6 @@ class RadialVector(object):
             for y in xrange(dim):
                 mat[x,y] = base[y].n_derivation(x % 3, here)
 
-
         par=scipy.linalg.solve(mat, right)
         scaled = base.scale(par)
         self.values[start:end] = scaled(self.mesh[start:end])
@@ -517,7 +523,14 @@ class RadialVector(object):
 
         return self.smooth_to_zero_from(i, rci)
 
+    def find_zero_r(self):
+        for r in xrange(self.mesh.size-2, -1, -1):
+            if self[r] != 0.0:
+               return self.mesh[r+1]
+        return 0
 
+    def space_derivation(self, dimension = 3, from_zero = False, at = None):
+        return self.mesh.space_derivation(self, dimension, from_zero, at)
 
     def piecefit(self, f=None, step=None, minval=None, initial = None):
       x=self.mesh.coors
@@ -601,6 +614,8 @@ class BaseRadialMesh(object):
         'linear' - no integral factor
         'spehrical' - spherical integral factor: 4*math.pi * r**2
         'r2' - physics spherical integral factor (used e.g. with spherical harmonics): r**2
+        'd2' - used when derivate 2D space integral to get radial function
+        'd3' - used when derivate 3D space integral to get radial function
         """
         vector = self._get_values_from_object(vector)
         factor = factor or self.integral_factor
@@ -650,6 +665,27 @@ class BaseRadialMesh(object):
 
         if at:
            return out.interpolate(at)
+        return out
+
+    """
+    Return radial function, that 'dimension'-D spherical integral is given as 'vector'.
+    2D
+    .. math ::
+       g_n = f_n' / (2 * pi * r)
+    .. math ::
+       g_n = f_n' / (4 * pi * r**2)
+    """
+    def space_derivation(self, vector, dimension = 3, from_zero = False, at = None):
+        out = self.derivation(vector, 'linear', from_zero, at)
+        if dimension == 3:
+           out = out / (4 * math.pi) / self.coors / self.coors
+        elif dimension == 2:
+           out = out / (2 * math.pi) / self.coors
+        else:
+           raise Exception('Please implement {}-dimensional sphere surface in radial_mesh.RadialMesh.space_derivation'.format(dimension))
+        if self.coors[0] == 0.0:
+           f=lambda x,a,b,c,d,e: ((((a*x)+b)*x+c)*x)+d
+           out[0]=f(0.0,*curve_fit(f, self.coors[1:15], out[1:15])[0])
         return out
 
     def derivation(self, vector, factor = None, from_zero = False, at = None):
@@ -811,23 +847,30 @@ class BaseRadialMesh(object):
 
     def __eq__(self, mesh):
         if mesh is self: return True
-        return mesh.coors == self.coors
+        if isinstance(mesh, np.ndarray):
+           return (mesh == self.coors).all()
+        if isinstance(mesh, RadialMesh):
+           return (mesh.coors == self.coors).all()
+        return
 
     def __getitem__(self, i):
         return self.coors[i]
-     
-     
+
+
     def orthogonalize(self, vectors, scalar_product = None, b_operator=None, factor=None, reorthogonalization = 0):
       """ Orthogonalization of given vectors.
-     
+
           Scalar product can be function of two numpy array, or None (then standard scalar
           product with given integral factor factor is used)
           If b_operator is not None, then b_operator-scalar product is used and so B-orthogonalization
           is performed. Operator can be given as radial vector representing local operator.
       """
- 
+
       if not isinstance(vectors, np.ndarray):
           vectors = [ self._get_values_from_object(v) for v in vectors ]
+      if isinstance(scalar_product, RadialVector):
+         b_operator = scalar_product
+         scalar_product = None
       if scalar_product is None:
          scalar_product = lambda x,y: self.dot(x,y,factor)
       if isinstance(b_operator, RadialVector):
@@ -840,11 +883,11 @@ class BaseRadialMesh(object):
       vvec = range(r)
       for i in xrange(r):
         vec[i] = RadialVector(self, orto[i])
-        vvec[i] = RadialVector(self, vorto[i]) if b_operator else vec[i] 
+        vvec[i] = RadialVector(self, vorto[i]) if b_operator else vec[i]
       return vec, c_coef, vvec
 
 
-        
+
 
 class RadialMesh(BaseRadialMesh):
     """   Radial mesh given by explicit mesh point coordinates   """
@@ -1028,7 +1071,7 @@ class LogspaceMesh(BaseParametricMesh):
           return LogspaceMesh(*args)
 
 class EquidistantMesh(BaseParametricMesh):
-    def __init__(self, from_val, to_val, num, factor = 'spherical'):
+    def __init__(self, num, from_val=0.0, to_val=1.0, factor = 'spherical'):
         if isinstance(num, float):
            num = int((to_val - from_val) / num + 1)
         distance = (to_val - from_val) / (num - 1)
