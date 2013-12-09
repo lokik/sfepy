@@ -242,9 +242,9 @@ class RadialVector(object):
           centre = np.zeros((3,))
         return self.interpolate(x, kind, centre, out)
 
-    def output_vector(self, filename=None):
+    def output_vector(self, filename=None, other=None):
         """ Save vector in two columns COORS VALUES """
-        return self.mesh.output_vector(self, filename)
+        return self.mesh.output_vector(self, filename, other)
 
     @staticmethod
     def sparse_merge(vectors):
@@ -358,15 +358,7 @@ class RadialVector(object):
 
     def plot(self, range=None, other=None):
         """ Plot vector using given shell script """
-        vect = [self]
-        if other:
-          if isinstance(other, list):
-             vect = other + [self]
-          else:
-             vect = [ self, other ]
-        else:
-          vect = self
-        return self.mesh.plot(vect, range=range)
+        return self.mesh.plot(self, range=range, other=other)
 
     def get_coors(self):
         """ Return mesh coors """
@@ -793,7 +785,7 @@ class BaseRadialMesh(object):
         return self.dot(self * vec_a, vec_b)
 
 
-    def output_vector(self, vector, filename=None):
+    def output_vector(self, vector, filename=None, other = None):
         """
         Output vector or vectors in columns prepended by mesh coordinates to file or stdout if no filename given.
         Output format
@@ -806,17 +798,20 @@ class BaseRadialMesh(object):
         if filename is None:
             import sys
             filename = sys.stdout
-        if isinstance(vector, RadialVector):
+        if isinstance(vector, (RadialVector, np.ndarray)):
             vector = [vector]
+
+        if isinstance(other, (RadialVector, np.ndarray)):
+           vector.append(other)
+        elif(other is not None):
+           vector.extend(other)
 
         if isinstance(vector, (list, tuple)):
           vector = [ v.values if isinstance(v, RadialVector) else v for v in vector ]
           vector = np.vstack([self.coors] + vector)
-        else:
-          vector = np.vstack([self.coors, vector])
         np.savetxt(filename, vector.T)
 
-    def plot(self, vector, cmd='plot', range=None):
+    def plot(self, vector, cmd='plot', range=None, other = None):
         """ Plot given vectors using given shell script"""
         import tempfile
         import os
@@ -830,7 +825,7 @@ class BaseRadialMesh(object):
            range=''
         fhandle, fname = tempfile.mkstemp()
         fil = os.fdopen(fhandle, 'w')
-        self.output_vector(vector, fil)
+        self.output_vector(vector, fil, other = other)
         fil.close()
         os.system('%s %s %s' % (cmd, fname, range))
         os.remove(fname)
@@ -1062,8 +1057,17 @@ class LogspaceMesh(BaseParametricMesh):
 
       @staticmethod
       def create(from_val, to_val, num):
+          """
+              all float:            (start, stop, exponent)
+              from_val is integer:  (start, num values, step)
+              num is integer:       (start, stop, num values)
+          """
+
           if isinstance(num, int):
              args = (math.log(from_val), math.log(to_val), num, True, math.e)
+          elif isinstance(to_val, int):
+             frm = math.log(from_val)
+             args = (frm, frm + math.log(num)*to_val , to_val, False, math.e)
           else:
              lg = math.log(num)
              count = math.log(to_val / from_val) / lg
