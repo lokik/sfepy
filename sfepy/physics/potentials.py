@@ -118,7 +118,7 @@ class PotentialBase(Struct):
         return self + other
 
     def __sub__(self, other):
-        return self - 1.0 * other
+        return self + (- 1.0 * other)
 
     def __rsub__(self, other):
         return -self + other
