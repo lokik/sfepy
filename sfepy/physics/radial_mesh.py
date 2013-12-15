@@ -262,6 +262,7 @@ class RadialVector(object):
         else:
           values = self._get_values_from_object(vector)
           self.values +=values
+        return self
 
     def __add__(self, vector):
         if(isinstance(vector, (int, float))):
@@ -276,6 +277,7 @@ class RadialVector(object):
         else:
           values = self._get_values_from_object(vector)
           self.values -=values
+        return self
 
     def __sub__(self, vector):
         if(isinstance(vector, (int, float))):
@@ -318,6 +320,7 @@ class RadialVector(object):
         else:
            values = self._get_values_from_object(vector)
            self.values *=values
+        return self
 
     def __div__(self, vector):
         if(isinstance(vector, (int, float))):
@@ -332,6 +335,7 @@ class RadialVector(object):
         else:
           values = self._get_values_from_object(vector)
           self.values /=values
+        return self
 
     def __ipow__(self, vector):
         if(isinstance(vector, (int, float))):
@@ -339,6 +343,7 @@ class RadialVector(object):
         else:
           self.values = self._get_values_from_object(vector)
           self.values **=vector
+        return self
 
     def __rdiv__(self, vector):
         if(isinstance(vector, (int, float))):
