@@ -224,7 +224,7 @@ def create_evaluable(expression, fields, materials, variables, integrals,
     return equations, variables
 
 
-def eval_equations(equations, variables, preserve_caches=False,
+def eval_equations(equations, variables, names=None, preserve_caches=False,
                    mode='eval', dw_mode='vector', term_mode=None,
                    verbose=True):
     """
@@ -236,6 +236,10 @@ def eval_equations(equations, variables, preserve_caches=False,
         The equations returned by :func:`create_evaluable()`.
     variables : Variables instance
         The variables returned by :func:`create_evaluable()`.
+    names:  If it's not None, evaluate only given equation(s)
+        If string is given and function would return dictionary eq_name: result_of_evaluation_of_eq, 
+        returns only the result. If list/set given, it behaves as there'd be only
+        equations of given name in equations object         
     preserve_caches : bool
         If True, do not invalidate evaluate caches of variables.
     mode : one of 'eval', 'el_avg', 'qp', 'weak'
@@ -252,7 +256,7 @@ def eval_equations(equations, variables, preserve_caches=False,
 
     Returns
     -------
-    out : array
+    out : array or dictionary
         The result of the evaluation.
     """
     asm_obj = None
@@ -267,7 +271,7 @@ def eval_equations(equations, variables, preserve_caches=False,
     if not preserve_caches:
         equations.invalidate_term_caches()
 
-    out = equations.evaluate(mode=mode, dw_mode=dw_mode, term_mode=term_mode,
+    out = equations.evaluate(names=names, mode=mode, dw_mode=dw_mode, term_mode=term_mode,
                              asm_obj=asm_obj)
 
     if variables.has_lcbc and mode == 'weak':
