@@ -28,6 +28,33 @@ import numpy as nm
 
 from sfepy import data_dir
 from sfepy.discrete.fem import MeshIO
+from sfepy.mechanics.matcoefs import stiffness_from_lame
+
+def post_process(out, pb, state, extend=False):
+    """
+    Calculate and output the strain and stresses for the given state.
+    """
+    from sfepy.base.base import Struct
+    from sfepy.discrete.fem import extend_cell_data
+
+    ev = pb.evaluate
+    strain = ev('ev_cauchy_strain.i.Y(u)', mode='el_avg')
+    stress = ev('ev_cauchy_stress.i.Y(inclusion.D, u)', mode='el_avg')
+
+    piezo = -ev('ev_piezo_stress.i.Y2(inclusion.coupling, phi)',
+                mode='el_avg')
+    piezo = extend_cell_data(piezo, pb.domain, 'Y2', val=0.0)
+
+    out['cauchy_strain'] = Struct(name='output_data', mode='cell',
+                                  data=strain, dofs=None)
+    out['elastic_stress'] = Struct(name='output_data', mode='cell',
+                                   data=stress, dofs=None)
+    out['piezo_stress'] = Struct(name='output_data', mode='cell',
+                                 data=piezo, dofs=None)
+    out['total_stress'] = Struct(name='output_data', mode='cell',
+                                 data=stress + piezo, dofs=None)
+
+    return out
 
 filename_mesh = data_dir + '/meshes/2d/special/circle_in_square.mesh'
 ## filename_mesh = data_dir + '/meshes/2d/special/circle_in_square_small.mesh'
@@ -39,11 +66,15 @@ omega_squared = omega**2
 
 conf_dir = os.path.dirname(__file__)
 io = MeshIO.any_from_filename(filename_mesh, prefix_dir=conf_dir)
-bbox, dim = io.read_bounding_box( ret_dim = True )
+bbox, dim = io.read_bounding_box(ret_dim=True)
 
 geom = {3 : '3_4', 2 : '2_3'}[dim]
 
 x_left, x_right = bbox[:,0]
+
+options = {
+    'post_process_hook' : 'post_process',
+}
 
 regions = {
     'Y' : 'all',
@@ -54,58 +85,9 @@ regions = {
     'Right' : ('vertices in (x > %f)' % (x_right - 1e-3), 'facet'),
 }
 
-material_2 = {
-    'name' : 'inclusion',
-
-    # epoxy
-    'function' : 'get_inclusion_pars',
-}
-
-def get_inclusion_pars(ts, coor, mode=None, **kwargs):
-    """TODO: implement proper 3D -> 2D transformation of constitutive
-    matrices."""
-    if mode == 'qp':
-        n_nod, dim = coor.shape
-        sym = (dim + 1) * dim / 2
-
-        dielectric = nm.eye( dim, dtype = nm.float64 )
-        # !!!
-        coupling = nm.ones( (dim, sym), dtype = nm.float64 )
-        #    coupling[0,1] = 0.2
-
-        out = {
-            # Lame coefficients in 1e+10 Pa.
-            'lam' : 0.1798,
-            'mu' : 0.148,
-            # dielectric tensor
-            'dielectric' : dielectric,
-            # piezoelectric coupling
-            'coupling' : coupling,
-            'density' : 0.1142, # in 1e4 kg/m3
-        }
-
-        for key, val in out.iteritems():
-            out[key] = nm.tile(val, (coor.shape[0], 1, 1))
-        return out
-
-functions = {
-    'get_inclusion_pars' : (get_inclusion_pars,),
-}
-
-field_0 = {
-    'name' : 'displacement',
-    'dtype' : nm.float64,
-    'shape' : dim,
-    'region' : 'Y',
-    'approx_order' : 1,
-}
-
-field_2 = {
-    'name' : 'potential',
-    'dtype' : nm.float64,
-    'shape' : (1,),
-    'region' : 'Y',
-    'approx_order' : 1,
+fields = {
+    'displacement' : ('real', dim, 'Y', 1),
+    'potential' : ('real', 1, 'Y', 1),
 }
 
 variables = {
@@ -121,41 +103,60 @@ ebcs = {
     'phi' : ('Y2_Surface', {'phi.all' : 0.0}),
 }
 
-integral_1 = {
-    'name' : 'i',
-    'order' : 2,
+def get_inclusion_pars(ts, coor, mode=None, **kwargs):
+    """TODO: implement proper 3D -> 2D transformation of constitutive
+    matrices."""
+    if mode == 'qp':
+        n_nod, dim = coor.shape
+        sym = (dim + 1) * dim / 2
+
+        dielectric = nm.eye(dim, dtype=nm.float64)
+        # !!!
+        coupling = nm.ones((dim, sym), dtype=nm.float64)
+        #    coupling[0,1] = 0.2
+
+        out = {
+            # Lame coefficients in 1e+10 Pa.
+            'lam' : 0.1798,
+            'mu' : 0.148,
+            # dielectric tensor
+            'dielectric' : dielectric,
+            # piezoelectric coupling
+            'coupling' : coupling,
+            'density' : 0.1142, # in 1e4 kg/m3
+        }
+        out['D'] = stiffness_from_lame(2, out['lam'], out['mu']),
+
+        for key, val in out.iteritems():
+            out[key] = nm.tile(val, (coor.shape[0], 1, 1))
+        return out
+
+materials = {
+    'inclusion' : (None, 'get_inclusion_pars')
+}
+
+functions = {
+    'get_inclusion_pars' : (get_inclusion_pars,),
+}
+
+integrals = {
+    'i' : 2,
 }
 
 equations = {
-    '1' : """- %f * dw_volume_dot.i.Y( inclusion.density, v, u )
-             + dw_lin_elastic_iso.i.Y( inclusion.lam, inclusion.mu, v, u )
-             - dw_piezo_coupling.i.Y2( inclusion.coupling, v, phi )
+    '1' : """- %f * dw_volume_dot.i.Y(inclusion.density, v, u)
+             + dw_lin_elastic_iso.i.Y(inclusion.lam, inclusion.mu, v, u)
+             - dw_piezo_coupling.i.Y2(inclusion.coupling, v, phi)
            = 0""" % omega_squared,
-    '2' : """dw_piezo_coupling.i.Y2( inclusion.coupling, u, psi )
-           + dw_diffusion.i.Y( inclusion.dielectric, psi, phi )
+    '2' : """dw_piezo_coupling.i.Y2(inclusion.coupling, u, psi)
+           + dw_diffusion.i.Y(inclusion.dielectric, psi, phi)
            = 0""",
 }
 
-##
-# Solvers etc.
-solver_0 = {
-    'name' : 'ls',
-    'kind' : 'ls.scipy_direct',
-}
-
-solver_1 = {
-    'name' : 'newton',
-    'kind' : 'nls.newton',
-
-    'i_max'      : 1,
-    'eps_a'      : 1e-10,
-    'eps_r'      : 1.0,
-    'macheps'    : 1e-16,
-    'lin_red'    : 1e-2, # Linear system error < (eps_a * lin_red).
-    'ls_red'     : 0.1,
-    'ls_red_warp': 0.001,
-    'ls_on'      : 1.1,
-    'ls_min'     : 1e-5,
-    'check'      : 0,
-    'delta'      : 1e-6,
+solvers = {
+    'ls' : ('ls.scipy_direct', {}),
+    'newton' : ('nls.newton',
+                {'i_max'      : 1,
+                 'eps_a'      : 1e-10,
+    }),
 }

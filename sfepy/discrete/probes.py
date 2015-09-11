@@ -222,7 +222,7 @@ class Probe(Struct):
 
         return out
 
-    def __call__(self, variable):
+    def __call__(self, variable, **kwargs):
         """
         Probe the given variable. The actual implementation is in self.probe(),
         so that it can be overridden in subclasses.
@@ -231,10 +231,12 @@ class Probe(Struct):
         ----------
         variable : Variable instance
             The variable to be sampled along the probe.
+        **kwargs : additional arguments
+            See :func:`Probe.probe()`.
         """
-        return self.probe(variable)
+        return self.probe(variable, **kwargs)
 
-    def probe(self, variable, mode='val'):
+    def probe(self, variable, mode='val', ret_points=False):
         """
         Probe the given variable.
 
@@ -245,6 +247,18 @@ class Probe(Struct):
         mode : {'val', 'grad'}, optional
             The evaluation mode: the variable value (default) or the
             variable value gradient.
+        ret_points : bool
+            If True, return also the probe points.
+
+        Returns
+        -------
+        pars : array
+            The parametrization of the probe points.
+        points : array, optional
+            If `ret_points` is True, the coordinates of points corresponding to
+            `pars`, where the `variable` is evaluated.
+        vals : array
+            The probed values.
         """
         refine_flag = None
 
@@ -274,7 +288,11 @@ class Probe(Struct):
 
         self.is_refined = True
 
-        return pars, vals
+        if ret_points:
+            return pars, points, vals
+
+        else:
+            return pars, vals
 
     def reset_refinement(self):
         """
