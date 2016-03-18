@@ -359,6 +359,7 @@ class Problem(Struct):
         Set definition of variables.
         """
         self.conf_variables = get_default(conf_variables, self.conf.variables)
+        self.variables = None
         self.reset()
 
     def select_variables(self, variable_names, only_conf=False):
@@ -394,9 +395,11 @@ class Problem(Struct):
 
         self.set_variables()
         variables = Variables.from_conf(self.conf_variables, self.fields)
+        self.variables = variables
 
         self.set_materials()
         materials = Materials.from_conf(self.conf_materials, self.functions)
+        self.materials = materials
 
         self.integrals = self.get_integrals()
         equations = Equations.from_conf(conf_equations, variables,
