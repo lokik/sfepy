@@ -572,7 +572,8 @@ class Region(Struct):
 
         Raises ValueError if `true_cells_only` is True and the region kind does
         not allow cells. For `true_cells_only` equal to False, cells incident
-        to facets are returned if the region itself contains no cells.
+        to facets are returned if the region itself contains no cells. Obeys
+        parent region, if given.
         """
         if self.cells.shape[0] == 0:
             if true_cells_only:
@@ -586,6 +587,11 @@ class Region(Struct):
                 cmesh.setup_connectivity(self.tdim - 1, self.tdim)
                 out = cmesh.get_incident(self.tdim, self.facets, self.tdim - 1)
 
+                if self.parent is not None:
+                    pcells = self.domain.regions[self.parent].cells
+                    ip = nm.in1d(out, pcells, assume_unique=False)
+                    out = out[ip]
+
         else:
             out = self.cells
 
@@ -598,11 +604,27 @@ class Region(Struct):
         Raises ValueError if `true_cells_only` is True and the region kind does
         not allow cells. For `true_cells_only` equal to False, cells incident
         to facets are returned if the region itself contains no cells.
+
+        Notes
+        -----
+        If the number of unique values in `cells` is smaller or equal to the
+        number of cells in the region, all `cells` has to be also the region
+        cells (`self` is a superset of `cells`). The region cells are
+        considered depending on `true_cells_only`.
+
+        Otherwise, indices of all cells in `self` that are in `cells` are
+        returned.
         """
         fcells = self.get_cells(true_cells_only=true_cells_only)
 
-        ii = nm.searchsorted(fcells, cells)
-        assert_((fcells[ii] == cells).all())
+        if len(nm.unique(cells)) <= len(nm.unique(fcells)):
+            # self is a superset of cells.
+            ii = nm.searchsorted(fcells, cells)
+            assert_((fcells[ii] == cells).all())
+
+        else:
+            aux = nm.searchsorted(cells, fcells)
+            ii = nm.where(nm.take(cells, aux, mode='clip') == fcells)[0]
 
         return ii
 
@@ -623,8 +645,8 @@ class Region(Struct):
             ip = nm.in1d(cells, pcells, assume_unique=False)
             cells = cells[ip]
 
-            counts = nm.diff(offs).astype(nm.uint32)
-            pos = nm.repeat(nm.arange(facets.shape[0], dtype=nm.uint32), counts)
+            counts = nm.diff(offs).astype(nm.int32)
+            pos = nm.repeat(nm.arange(facets.shape[0], dtype=nm.int32), counts)
             new_counts = nm.bincount(pos, weights=ip).astype(nm.uint32)
             offs = nm.cumsum(nm.r_[0, new_counts], dtype=nm.uint32)
 

@@ -52,7 +52,6 @@ from sfepy.postprocess.domain_specific import DomainSpecificPlot
 omits = [
     'vibro_acoustic3d_mid.py',
     'linear_elastic_mM.py',
-    'time_poisson_explicit.py',
     'its2D_5.py',
     'linear_elastic_probes.py',
     '__init__.py',
@@ -195,6 +194,18 @@ custom = {
             'view' : (-37, 51, 1.5, [-0.28, -0.29, 0.0]),
             'roll' : -51.5,
             'opacity' : {'wireframe' : 0.2},
+        },
+    },
+    'linear_elasticity/shell10x_cantilever.py' : {
+        '' : {
+            'is_wireframe' : True,
+            'domain_specific' : {
+                'u_disp' : DomainSpecificPlot('plot_displacements',
+                                              ['rel_scaling=1']),
+            },
+            'view' : (-45, 81, 0.59, [-0.075,  0.023,  0.093]),
+            'roll' : -75.0,
+            'opacity' : {'wireframe' : 0.5},
         },
     },
     'navier_stokes/stokes_slip_bc.py' : {

@@ -692,7 +692,7 @@ class Variables(Container):
 
             for ii in self.state:
                 var = self[ii]
-                var.set_data(data, self.di.indx[var.name],
+                var.set_data(data, self.di.indx[var.name], step=step,
                              preserve_caches=preserve_caches)
 
         else:
@@ -1101,6 +1101,10 @@ class Variable(Struct):
                   % (self.n_dof, n_data_dof)
             raise ValueError(msg)
 
+        elif (step > 0) or (-step >= len(self.data)):
+            raise ValueError('step %d out of range! ([%d, 0])'
+                             % (step, -(len(self.data) - 1)))
+
         else:
             self.data[step] = data
             self.indx = indx
@@ -1490,7 +1494,7 @@ class FieldVariable(Variable):
             self.initial_condition[eq] = vv
 
     def get_approximation(self):
-        return self.field.ap
+        return self.field
 
     def get_data_shape(self, integral, integration='volume', region_name=None):
         """
@@ -1500,11 +1504,10 @@ class FieldVariable(Variable):
         ----------
         integral : Integral instance
             The integral describing used numerical quadrature.
-        integration : 'volume', 'plate', 'surface', 'surface_extra' or 'point'
+        integration : 'volume', 'surface', 'surface_extra', 'point' or 'custom'
             The term integration type.
         region_name : str
-            The name of surface region, required when `shape_kind` is
-            'surface'.
+            The name of the region of the integral.
 
         Returns
         -------
@@ -1569,12 +1572,12 @@ class FieldVariable(Variable):
             The integral defining quadrature points in which the
             evaluation occurs. If None, the first order volume integral
             is created. Must not be None for surface integrations.
-        integration : one of 'volume', 'plate', 'surface', 'surface_extra'
+        integration : 'volume', 'surface', 'surface_extra', or 'point'
             The term integration type. If None, it is derived from
             `integral`.
         step : int, default 0
             The time step (0 means current, -1 previous, ...).
-        derivative : None or 'dt'
+        time_derivative : None or 'dt'
             If not None, return time derivative of the data,
             approximated by the backward finite difference.
         is_trace : bool, default False
@@ -1593,6 +1596,10 @@ class FieldVariable(Variable):
             `(n_el, n_qp, n_row, n_col)` with the requested data,
             where `n_row`, `n_col` depend on `mode`.
         """
+        if integration == 'custom':
+            msg = 'cannot use FieldVariable.evaluate() with custom integration!'
+            raise ValueError(msg)
+
         step_cache = self.evaluate_cache.setdefault(mode, {})
         cache = step_cache.setdefault(step, {})
 
@@ -1817,8 +1824,7 @@ class FieldVariable(Variable):
 
         integral = Integral('i_tmp', 1)
 
-        ap = field.ap
-        vg = ap.describe_geometry(field, 'volume', field.region, integral)
+        vg = field.get_mapping(field.region, integral, 'volume')
 
         diameters = domain.get_element_diameters(cells, vg, mode, square=square)
 
@@ -1913,7 +1919,7 @@ class FieldVariable(Variable):
         """
         Evaluate the variable in the given physical coordinates. Convenience
         wrapper around :func:`Field.evaluate_at()
-        <sfepy.discrete.fem.fields_nodal.H1NodalMixin.evaluate_at()>`, see its
+        <sfepy.discrete.common.fields.Field.evaluate_at()>`, see its
         docstring for more details.
         """
         source_vals = self().reshape((self.n_nod, self.n_components))

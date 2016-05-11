@@ -882,6 +882,7 @@ Utility scripts
    src/script/plot_times
    src/script/save_basis
    src/script/show_authors
+   src/script/show_mesh_info.rst
    src/script/show_terms_use
    src/script/sync_module_docs
    src/script/tile_periodic_mesh
@@ -937,7 +938,6 @@ This package implements various PDE discretization schemes (FEM or IGA).
    src/sfepy/discrete/evaluate_variable
    src/sfepy/discrete/functions
    src/sfepy/discrete/integrals
-   src/sfepy/discrete/mass_operator
    src/sfepy/discrete/materials
    src/sfepy/discrete/parse_equations
    src/sfepy/discrete/parse_regions
@@ -981,7 +981,6 @@ sfepy.discrete.fem sub-package
    src/sfepy/discrete/fem/extmods/lobatto_bases
    src/sfepy/discrete/fem/facets
    src/sfepy/discrete/fem/fe_surface
-   src/sfepy/discrete/fem/fea
    src/sfepy/discrete/fem/fields_base
    src/sfepy/discrete/fem/fields_hierarchic
    src/sfepy/discrete/fem/fields_nodal
@@ -1013,6 +1012,15 @@ sfepy.discrete.iga sub-package
    src/sfepy/discrete/iga/plot_nurbs
    src/sfepy/discrete/iga/utils
 
+sfepy.discrete.structural sub-package
+"""""""""""""""""""""""""""""""""""""
+
+.. toctree::
+   :maxdepth: 2
+
+   src/sfepy/discrete/structural/fields
+   src/sfepy/discrete/structural/mappings
+
 sfepy.homogenization package
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -1041,6 +1049,7 @@ sfepy.linalg package
    src/sfepy/linalg/eigen
    src/sfepy/linalg/geometry
    src/sfepy/linalg/sparse
+   src/sfepy/linalg/sympy_operators
    src/sfepy/linalg/utils
    src/sfepy/linalg/extmods/crcm
 
@@ -1054,6 +1063,7 @@ sfepy.mechanics package
    src/sfepy/mechanics/elastic_constants
    src/sfepy/mechanics/matcoefs
    src/sfepy/mechanics/membranes
+   src/sfepy/mechanics/shell10x
    src/sfepy/mechanics/tensors
    src/sfepy/mechanics/units
 
@@ -1105,7 +1115,6 @@ sfepy.postprocess package
 .. toctree::
    :maxdepth: 2
 
-   src/sfepy/postprocess/dataset_manager
    src/sfepy/postprocess/domain_specific
    src/sfepy/postprocess/plot_cmesh
    src/sfepy/postprocess/plot_dofs
@@ -1143,7 +1152,6 @@ sfepy.terms package
 
    terms_overview
    src/sfepy/terms/terms
-   src/sfepy/terms/terms_acoustic
    src/sfepy/terms/terms_adj_navier_stokes
    src/sfepy/terms/terms_basic
    src/sfepy/terms/terms_biot
@@ -1160,6 +1168,7 @@ sfepy.terms package
    src/sfepy/terms/terms_navier_stokes
    src/sfepy/terms/terms_piezo
    src/sfepy/terms/terms_point
+   src/sfepy/terms/terms_shells
    src/sfepy/terms/terms_surface
    src/sfepy/terms/terms_th
    src/sfepy/terms/terms_volume

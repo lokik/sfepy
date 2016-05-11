@@ -70,6 +70,12 @@ Parallel runs::
 
   $ mpiexec -n 8 python examples/multi_physics/biot_parallel_interactive.py output-parallel -2 --shape 101,101 --metis -snes_monitor -snes_view -snes_converged_reason -ksp_monitor
 
+Using FieldSplit preconditioner::
+
+  $ mpiexec -n 2 python examples/multi_physics/biot_parallel_interactive.py output-parallel --shape=101,101 -snes_monitor -snes_converged_reason -ksp_monitor -pc_type fieldsplit
+
+  $ mpiexec -n 8 python examples/multi_physics/biot_parallel_interactive.py output-parallel --shape=1001,1001 --metis -snes_monitor -snes_converged_reason -ksp_monitor -pc_type fieldsplit -pc_fieldsplit_type additive
+
 View the results using (strip linearization or approximation orders one)::
 
   $ python postproc.py output-parallel/sol.h5 --wireframe -b -d'p,plot_warp_scalar:u,plot_displacements'
@@ -97,6 +103,7 @@ from sfepy.discrete.conditions import Conditions, EssentialBC
 from sfepy.terms import Term
 from sfepy.solvers.ls import PETScKrylovSolver
 from sfepy.solvers.nls import PETScNonlinearSolver
+from sfepy.mechanics.matcoefs import stiffness_from_lame
 
 import sfepy.parallel.parallel as pl
 from sfepy.parallel.evaluate import PETScParallelEvaluator
@@ -156,10 +163,11 @@ def create_local_problem(omega_gi, orders):
         alpha = 1e2 * nm.array([[0.132], [0.132], [0.132],
                                 [0.092], [0.092], [0.092]])
 
-    mat = Material('m', lam=10, mu=5, k=1, alpha=alpha)
+    mat = Material('m', D=stiffness_from_lame(mesh.dim, lam=10, mu=5),
+                   k=1, alpha=alpha)
     integral = Integral('i', order=2*(max(order_u, order_p)))
 
-    t11 = Term.new('dw_lin_elastic_iso(m.lam, m.mu, v_i, u_i)',
+    t11 = Term.new('dw_lin_elastic(m.D, v_i, u_i)',
                    integral, omega_i, m=mat, v_i=v_i, u_i=u_i)
     t12 = Term.new('dw_biot(m.alpha, v_i, p_i)',
                    integral, omega_i, m=mat, v_i=v_i, p_i=p_i)
@@ -261,6 +269,12 @@ def solve_problem(mesh_filename, options, comm):
                   verbose=True)
     status = {}
     ls = PETScKrylovSolver(conf, comm=comm, mtx=pmtx, status=status)
+
+    field_ranges = {}
+    for ii, variable in enumerate(variables.iter_state(ordered=True)):
+        field_ranges[variable.name] = lfds[ii].petsc_dofs_range
+
+    ls.set_field_split(field_ranges, comm=comm)
 
     ev = PETScParallelEvaluator(pb, pdofs, drange, True,
                                 psol, comm, verbose=True)
@@ -411,10 +425,13 @@ def main():
 
     output_dir = options.output_dir
 
+    filename = os.path.join(output_dir, 'output_log_%02d.txt' % comm.rank)
+    if comm.rank == 0:
+        ensure_path(filename)
+    comm.barrier()
+
     output.prefix = 'sfepy_%02d:' % comm.rank
-    output.set_output(filename=os.path.join(output_dir,
-                                            'output_log_%02d.txt' % comm.rank),
-                      combined=options.silent == False)
+    output.set_output(filename=filename, combined=options.silent == False)
 
     output('petsc options:', petsc_opts)
 
@@ -441,8 +458,6 @@ def main():
 
         mesh = gen_block_mesh(dims, shape, centre, name='block-fem',
                               verbose=True)
-
-        ensure_path(mesh_filename)
         mesh.write(mesh_filename, io='auto')
 
     comm.barrier()

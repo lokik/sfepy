@@ -146,7 +146,7 @@ def describe_geometry(field, region, integral):
     """
     # Coordinates of element vertices.
     sg, _ = field.get_mapping(region, integral, 'surface')
-    sd = field.ap.surface_data[region.name]
+    sd = field.surface_data[region.name]
     coors = field.coors[sd.econn[:, :sg.n_ep]]
 
     # Coordinate transformation matrix (transposed!).
@@ -162,6 +162,7 @@ def describe_geometry(field, region, integral):
     qp = integral.get_qp(gel.name)
     ps = PolySpace.any_from_args(None, gel, field.approx_order)
     membrane_geo = vm.get_mapping(qp[0], qp[1], poly_space=ps)
+    membrane_geo.bf[:] = ps.eval_base(qp[0])
 
     return mtx_t, membrane_geo
 

@@ -4,7 +4,7 @@ from copy import copy
 import numpy as nm
 
 from sfepy.base.base import (complex_types, dict_from_keys_init,
-                             assert_, is_derived_class,
+                             assert_, is_derived_class, ordered_iteritems,
                              insert_static_method, output, get_default,
                              get_default_attr, Struct, basestr)
 from sfepy.base.ioutils \
@@ -26,6 +26,7 @@ supported_formats = {
     '.neu'  : 'gambit',
     '.med'  : 'med',
     '.cdb'  : 'ansys_cdb',
+    '.msh'  : 'msh_v2',
 }
 
 # Map mesh formats to read and write capabilities.
@@ -47,6 +48,7 @@ supported_capabilities = {
     'gambit' : ['r', 'rn'],
     'med' : ['r'],
     'ansys_cdb' : ['r'],
+    'msh_v2' : ['r'],
 }
 
 supported_cell_types = {
@@ -63,14 +65,20 @@ supported_cell_types = {
     'gambit' : ['tri3', 'quad4', 'tetra4', 'hexa8'],
     'med' : ['tri3', 'quad4', 'tetra4', 'hexa8'],
     'ansys_cdb' : ['tetra4', 'hexa8'],
+    'msh_v2' : ['line2', 'tri3', 'quad4', 'tetra4', 'hexa8'],
     'function' : ['user'],
 }
 
-def output_writable_meshes():
-    output('Supported writable mesh formats are:')
-    for key, val in supported_capabilities.iteritems():
-        if 'w' in val:
-            output(key)
+def output_mesh_formats(mode='r'):
+    for key, vals in ordered_iteritems(supported_formats):
+        if isinstance(vals, basestr):
+            vals = [vals]
+
+        for val in vals:
+            caps = supported_capabilities[val]
+            if mode in caps:
+                output('%s (%s), cell types: %s'
+                       % (val, key, supported_cell_types[val]))
 
 def split_conns_mat_ids(conns_in):
     """
@@ -106,6 +114,31 @@ def convert_complex_output(out_in):
             out[key] = val
 
     return out
+
+def _read_bounding_box(fd, dim, node_key,
+                       c0=0, ndplus=1, ret_fd=False, ret_dim=False):
+    while 1:
+        line = skip_read_line(fd, no_eof=True).split()
+        if line[0] == node_key:
+            num = int(read_token(fd))
+            nod = read_array(fd, num, dim + ndplus, nm.float64)
+            break
+
+    bbox = nm.vstack((nm.amin(nod[:,c0:(dim + c0)], 0),
+                      nm.amax(nod[:,c0:(dim + c0)], 0)))
+
+    if ret_dim:
+        if ret_fd:
+            return bbox, dim, fd
+        else:
+            fd.close()
+            return bbox, dim
+    else:
+        if ret_fd:
+            return bbox, fd
+        else:
+            fd.close()
+            return bbox
 
 class MeshIO(Struct):
     """
@@ -253,32 +286,9 @@ class MeditMeshIO(MeshIO):
 
     def read_bounding_box(self, ret_fd=False, ret_dim=False):
         fd = open(self.filename, 'r')
-
         dim, fd  = self.read_dimension(ret_fd=True)
-
-        while 1:
-            line = skip_read_line(fd, no_eof=True).split()
-            if line[0] == 'Vertices':
-                num = int(read_token(fd))
-                nod = read_array(fd, num, dim + 1, nm.float64)
-                break
-
-        bbox = nm.vstack((nm.amin(nod[:,:dim], 0),
-                          nm.amax(nod[:,:dim], 0)))
-
-        if ret_dim:
-            if ret_fd:
-                return bbox, dim, fd
-            else:
-                fd.close()
-                return bbox, dim
-        else:
-            if ret_fd:
-                return bbox, fd
-            else:
-                fd.close()
-                return bbox
-
+        return _read_bounding_box(fd, dim, 'Vertices',
+                                  ret_fd=ret_fd, ret_dim=ret_dim)
 
     def read(self, mesh, omit_facets=False, **kwargs):
         dim, fd  = self.read_dimension(ret_fd=True)
@@ -450,10 +460,8 @@ DATASET UNSTRUCTURED_GRID
 vtk_cell_types = {'1_1' : 1, '1_2' : 3, '2_2' : 3, '3_2' : 3,
                   '2_3' : 5, '2_4' : 9, '3_4' : 10, '3_8' : 12}
 vtk_dims = {1 : 1, 3 : 1, 5 : 2, 9 : 2, 10 : 3, 12 : 3}
-vtk_inverse_cell_types = {(3, 2) : '1_2', (5, 2) : '2_3',
-                          (8, 2) : '2_4', (9, 2) : '2_4',
-                          (3, 3) : '1_2', (10, 3) : '3_4',
-                          (11, 3) : '3_8', (12, 3) : '3_8' }
+vtk_inverse_cell_types = {3 : '1_2', 5 : '2_3', 8 : '2_4', 9 : '2_4',
+                          10 : '3_4', 11 : '3_8', 12 : '3_8'}
 vtk_remap = {8 : nm.array([0, 1, 3, 2], dtype=nm.int32),
              11 : nm.array([0, 1, 3, 2, 4, 5, 7, 6], dtype=nm.int32)}
 vtk_remap_keys = vtk_remap.keys()
@@ -612,19 +620,17 @@ class VTKMeshIO(MeshIO):
 
         dconns = {}
         for iel, row in enumerate(raw_conn):
-            ct = cell_types[iel]
-            key = (ct, dim)
-            if key not in vtk_inverse_cell_types:
+            vct = cell_types[iel]
+            if vct not in vtk_inverse_cell_types:
                 continue
-            ct = vtk_inverse_cell_types[key]
-            dconns.setdefault(key, []).append(row[1:] + mat_id[iel])
+            ct = vtk_inverse_cell_types[vct]
+            dconns.setdefault(vct, []).append(row[1:] + mat_id[iel])
 
         descs = []
         conns = []
         mat_ids = []
-        for key, conn in dconns.iteritems():
-            ct = key[0]
-            sct = vtk_inverse_cell_types[key]
+        for ct, conn in dconns.iteritems():
+            sct = vtk_inverse_cell_types[ct]
             descs.append(sct)
 
             aux = nm.array(conn, dtype=nm.int32)
@@ -2268,14 +2274,18 @@ class NEUMeshIO(MeshIO):
 
         fd = open(self.filename, 'r')
 
-        row = fd.readline().split()
+        row = fd.readline()
         while 1:
             if not row: break
-            if len(row) == 0: continue
+            row = row.split()
+
+            if len(row) == 0:
+                row = fd.readline()
+                continue
 
             if (row[0] == 'NUMNP'):
                 row = fd.readline().split()
-                n_nod, n_el, dim = row[0], row[1], int(row[4])
+                n_nod, n_el, dim = int(row[0]), int(row[1]), int(row[4])
 
             elif (row[0] == 'NODAL'):
                 row = fd.readline().split()
@@ -2329,8 +2339,7 @@ class NEUMeshIO(MeshIO):
                 row = fd.readline().split()
                 assert_(row[0] == 'ENDOFSECTION')
 
-            else:
-                row = fd.readline().split()
+            row = fd.readline()
 
         fd.close()
 
@@ -2338,18 +2347,21 @@ class NEUMeshIO(MeshIO):
             print 'wrong total number of group elements! (%d == %d)'\
                   % (int(n_el), len(group_n_els))
 
-        mat_ids = [None] * int(n_el)
+        mat_ids = nm.zeros(n_el, dtype=nm.int32)
         for ii, els in enumerate(groups):
-            for iel in els:
-                mat_ids[int(iel) - 1] = group_ids[ii]
+            els = nm.array(els, dtype=nm.int32)
+            mat_ids[els - 1] = group_ids[ii]
 
         for elem in el.keys():
             if len(el[elem]) > 0:
-                for iel in el[elem]:
-                    for ii in range(len(iel)):
-                        iel[ii] = int(iel[ii]) - 1
-                    iel[-1] = mat_ids[iel[-1]]
-                conns_in.append(el[elem])
+                els = nm.array(el[elem], dtype=nm.int32)
+                els[:, :-1] -= 1
+                els[:, -1] = mat_ids[els[:, -1]-1]
+
+                if elem == '3_8':
+                    els = els[:, [0, 1, 3, 2, 4, 5, 7, 6, 8]]
+
+                conns_in.append(els)
                 descs.append(elem)
 
         nod = nm.array(nod, nm.float64)
@@ -2563,6 +2575,150 @@ class ANSYSCDBMeshIO(MeshIO):
         mesh.nodal_bcs = {}
         for key, nods in nodal_bcs.iteritems():
             mesh.nodal_bcs[key] = remap[nods]
+
+        return mesh
+
+class Msh2MeshIO(MeshIO):
+    format = 'msh_v2'
+
+    msh_cells = {
+        1: (2, 2),
+        2: (2, 3),
+        3: (2, 4),
+        4: (3, 4),
+        5: (3, 8),
+        6: (3, 6),
+    }
+    prism2hexa = nm.asarray([0, 1, 2, 2, 3, 4, 5, 5])
+
+    def read_dimension(self, ret_fd=True):
+        fd = open(self.filename, 'r')
+        while 1:
+            lastpos = fd.tell()
+            line = skip_read_line(fd).split()
+            if line[0] in ['$Nodes', '$Elements']:
+                num = int(read_token(fd))
+                coors = read_array(fd, num, 4, nm.float64)
+                fd.seek(lastpos)
+                if nm.sum(nm.abs(coors[:,3])) < 1e-16:
+                    dims = 2
+                else:
+                    dims = 3
+                break
+
+            if line[0] == '$PhysicalNames':
+                num = int(read_token(fd))
+                dims = []
+                for ii in range(num):
+                    dims.append(int(skip_read_line(fd, no_eof=True).split()[0]))
+
+                break
+
+        dim = nm.max(dims)
+        if ret_fd:
+            return dim, fd
+        else:
+            fd.close()
+            return dim
+
+    def read_bounding_box(self, ret_fd=False, ret_dim=False):
+        fd = open(self.filename, 'r')
+        dim, fd  = self.read_dimension(ret_fd=True)
+        return _read_bounding_box(fd, dim, '$Nodes',
+                                  c0=1, ret_fd=ret_fd, ret_dim=ret_dim)
+
+    def read(self, mesh, omit_facets=True, **kwargs):
+        fd = open(self.filename, 'r')
+
+        conns = []
+        descs = []
+        mat_ids = []
+        tags = []
+        dims = []
+
+        while 1:
+            line = skip_read_line(fd).split()
+            if not line:
+                break
+
+            ls = line[0]
+            if ls == '$MeshFormat':
+                skip_read_line(fd)
+            elif ls == '$PhysicalNames':
+                num = int(read_token(fd))
+                for ii in range(num):
+                    skip_read_line(fd)
+            elif ls == '$Nodes':
+                num = int(read_token(fd))
+                coors = read_array(fd, num, 4, nm.float64)
+
+            elif ls == '$Elements':
+                num = int(read_token(fd))
+                for ii in range(num):
+                    line = [int(jj) for jj in skip_read_line(fd).split()]
+                    if line[1] > 6:
+                        continue
+                    dimension, nc = self.msh_cells[line[1]]
+                    dims.append(dimension)
+                    ntag = line[2]
+                    mat_id = line[3]
+                    conn = line[(3 + ntag):]
+                    desc = '%d_%d' % (dimension, nc)
+                    if desc in descs:
+                        idx = descs.index(desc)
+                        conns[idx].append(conn)
+                        mat_ids[idx].append(mat_id)
+                        tags[idx].append(line[3:(3 + ntag)])
+                    else:
+                        descs.append(desc)
+                        conns.append([conn])
+                        mat_ids.append([mat_id])
+                        tags.append(line[3:(3 + ntag)])
+
+            elif ls == '$Periodic':
+                periodic = ''
+                while 1:
+                    pline = skip_read_line(fd)
+                    if '$EndPeriodic' in pline:
+                        break
+                    else:
+                        periodic += pline
+
+            elif line[0] == '#' or ls[:4] == '$End':
+                pass
+
+            else:
+                output('skipping unknown entity: %s' % line)
+                continue
+
+        fd.close()
+
+        dim = nm.max(dims)
+        if '3_6' in descs:
+            idx6 = descs.index('3_6')
+            c3_6as8 = nm.asarray(conns[idx6],
+                                 dtype=nm.int32)[:,self.prism2hexa]
+            if '3_8' in descs:
+                descs.pop(idx6)
+                c3_6m = nm.asarray(mat_ids.pop(idx6), type=nm.int32)
+                idx8 = descs.index('3_8')
+                c3_8 = nm.asarray(conns[idx8], type=nm.int32)
+                c3_8m = nm.asarray(mat_ids[idx8], type=nm.int32)
+                conns[idx8] = nm.vstack([c3_8, c3_6as8])
+                mat_ids[idx8] = nm.hstack([c3_8m, c3_6m])
+            else:
+                descs[idx6] = '3_8'
+                conns[idx6] = c3_6as8
+
+        descs0, mat_ids0, conns0 = [], [], []
+        for ii in range(len(descs)):
+            if int(descs[ii][0]) == dim:
+                conns0.append(nm.asarray(conns[ii], dtype=nm.int32) - 1)
+                mat_ids0.append(nm.asarray(mat_ids[ii], dtype=nm.int32))
+                descs0.append(descs[ii])
+
+        mesh._set_io_data(coors[:,1:], nm.int32(coors[:,-1] * 0),
+                          conns0, mat_ids0, descs0)
 
         return mesh
 

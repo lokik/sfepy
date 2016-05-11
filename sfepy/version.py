@@ -1,5 +1,5 @@
 # SfePy version
-__version__ = '2015.2'
+__version__ = '2016.1'
 
 # "Minimal" supported versions.
 NUMPY_MIN_VERSION = '1.3'
@@ -8,7 +8,7 @@ MATPLOTLIB_MIN_VERSION = '0.99.0'
 PYPARSING_MIN_VERSION = '1.5.0'
 PYTABLES_MIN_VERSION = '2.1.2'
 MAYAVI_MIN_VERSION = '3.3.0'
-SYMPY_MIN_VERSION = '0.7.2'
+SYMPY_MIN_VERSION = '0.7.3'
 IGAKIT_MIN_VERSION = '0.1'
 PETSC4PY_MIN_VERSION = '3.4'
 MPI4PY_MIN_VERSION = '1.3.1'

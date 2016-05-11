@@ -1,5 +1,736 @@
 # created: 20.07.2007 (-1)
 
+.. _2015.4-2016.1:
+
+from 2015.4 to 2016.1
+=====================
+
+- merge pull request #307 from 'vlukes/mesh_generators'
+
+  - fix gen_mesh_from_voxels()
+  - new tests of gen_mesh_from_geom(), gen_tiled_mesh(), gen_mesh_from_voxels()
+
+- merge branch 'auto-check-material-shapes'
+
+  - implement general Term.check_shapes() - check term argument shapes at
+    run-time
+  - update terms to use generic variable size in .arg_shapes where appropriate
+
+    - update IntegrateVolumeTerm, IntegrateSurfaceTerm, VolumeTerm,
+      SurfaceTerm, VolumeSurfaceTerm, IntegrateMatTerm, SumNodalValuesTerm,
+      GradTerm
+
+  - remove .check_shapes() from all terms having it
+
+    - remove it from DotProductVolumeTerm, BCNewtonTerm,
+      VectorDotGradScalarTerm, VectorDotScalarTerm, LinearElasticIsotropicTerm,
+      LinearPrestressTerm, LinearStrainFiberTerm, SurfaceTractionTLTerm,
+      VolumeSurfaceTLTerm, ConcentratedPointLoadTerm
+    - new .arg_shapes class attribute in DotProductSurfaceTerm,
+      ConcentratedPointLoadTerm
+
+  - update LinearPointSpringTerm for new .arg_shapes class attribute
+
+    - change special material argument to a single float
+    - update tests/test_elasticity_small_strain.py
+
+  - update get_arg_kinds() to distinguish 'ts' argument, new _match_ts
+  - update tests/test_term_call_modes.py for TimeStepper ('ts') term argument -
+    update make_term_args()
+  - new/fill-in .arg_shapes class attributes in time history terms
+
+    - update BiotTHTerm, BiotETHTerm, DotSProductVolumeOperatorWTHTerm,
+      DotSProductVolumeOperatorWETHTerm, LinearElasticTHTerm,
+      LinearElasticETHTerm, CauchyStressTHTerm, CauchyStressETHTerm
+
+  - change 'N' value to 1 in _parse_scalar_shape() in make_term_args() - fix
+    for time history terms
+
+- merge pull request #306 from 'vlukes/fix-gen_mesh_from_geom'
+
+  - fix to_poly_file() in geom_tools.py
+  - fix gen_mesh_from_geom(), remove gen_mesh_from_poly()
+
+- merge branch 'remove-ts-explicit'
+
+  - remove make_explicit_step(), ExplicitTimeSteppingSolver
+  - remove MassOperator and sfepy/discrete/mass_operator.py
+  - update time_poisson_explicit.py to use ts.simple
+
+- merge pull request #304 from 'vlukes/splines'
+
+  - new documentation to SplineBox and SplineRegion2D classes
+  - update bspline.py, new SplineRegion2D in splinebox.py
+
+- merge branch 'no-fea'
+
+  - replace Interpolant by PolySpace in GeometryElement
+
+    - GeometryElement.interp -> .poly_space
+    - update FEDomain.__init__() and affected code
+
+  - move set_mesh_coors() into sfepy/discrete/fem/fields_base.py - update
+    Problem.set_mesh_coors()
+  - move Approximation into FEField and subclasses, part 1
+
+    - update volume fields
+    - prepare for volume-only PolySpace in fields
+    - remove imports of fea.py
+    - sfepy/discrete/fem/fea.py:
+
+      - move eval_nodal_coors(), _interp_to_faces() into
+        sfepy/discrete/fem/fields_base.py
+      - remove Interpolant
+      - remove Approximation.eval_extra_coor(), .get_connectivity(),
+        .get_poly_space()
+      - move into FEField:
+
+        - Approximation.clear_qp_base(), .get_qp(), .get_base()
+        - Approximation._create_bqp(), .create_bqp() into new
+          FEField.create_bqp()
+        - Approximation.describe_geometry() into FEField.create_mapping()
+
+    - new FEField attributes:
+
+      - from Approximation .surface_data, .point_data, .ori, .efaces, .econn
+      - .poly_space
+
+    - update FEField.__init__(), ._setup_esurface(), .setup_coors(),
+      .get_data_shape(), .linearize(), .interp_to_qp()
+    - replace Interpolant by PolySpace in VolumeField
+    - update VolumeField._create_interpolant(), ._init_econn(),
+      ._setup_vertex_dofs(), .setup_extra_data(), .get_econn()
+    - remove VolumeField._setup_approximations()
+    - rename VolumeField._setup_surface_data(), ._setup_point_data() to
+      .setup_surface_data(), .setup_point_data(), merge with
+      Approximation.setup_surface_data(), .setup_point_data()
+    - update H1NodalMixin._setup_facet_orientations(), ._setup_facet_dofs(),
+      ._setup_bubble_dofs(), .create_basis_context()
+    - update H1NodalVolumeField.interp_v_vals_to_n_vals()
+    - update H1HierarchicVolumeField._init_econn(),
+      ._setup_facet_orientations(), ._setup_facet_dofs(),
+      ._setup_bubble_dofs(), .create_basis_context()
+    - update eval_in_els_and_qp(), create_expression_output()
+
+  - move Approximation into FEField and subclasses, part 2
+
+    - update surface integration/mappings for volume-only PolySpace in fields
+    - update FEField.get_data_shape(), .create_bqp(), .create_mapping()
+    - update FEMapping.__init__() - new .indices attribute
+    - new SurfaceMapping.set_basis_indices(), .get_base()
+
+  - move Approximation into FEField and subclasses, part 3
+
+    - update FEField.create_mesh(), VolumeField.average_qp_to_vertices()
+    - update compute_nodal_normals()
+    - update FieldVariable.get_element_diameters()
+    - update describe_geometry() in membranes.py
+
+  - move Approximation into FEField and subclasses, part 4
+
+    - remove H1DiscontinuousField._setup_approximations()
+    - update H1DiscontinuousField._setup_global_base()
+
+  - move Approximation into FEField and subclasses, part 5
+
+    - update surface fields
+    - fix .surface_data, .point_data initialization in FEField.__init__()
+    - update FEField.get_qp(), .create_mapping()
+    - update SurfaceField._create_interpolant(), .setup_extra_data(),
+      ._init_econn(), ._setup_vertex_dofs(), .get_econn(),
+      .average_qp_to_vertices()
+    - remove SurfaceField._setup_approximations()
+
+  - remove sfepy/discrete/fem/fea.py
+  - update FieldVariable.get_approximation() to return Field
+  - new FEField.get_connectivity() convenience alias
+  - update sfepy/parallel/ code for no Approximation
+
+    - update create_task_dof_maps(), distribute_field_dofs(),
+      distribute_fields_dofs(), get_local_ordering(), plot_partitioning(),
+      plot_local_dofs()
+
+  - script/save_basis.py: update save_basis_on_mesh() for no Approximation
+  - update tests/test_poly_spaces.py for no Approximation
+
+- merge branch 'active-fibres-update'
+
+  - update HyperElasticBase to pass kwargs to stress and tangent modulus
+    functions - update HyperElasticBase.compute_stress(), .compute_tan_mod()
+  - new create_omega(), compute_fibre_strain()
+  - update FibresActiveTLTerm - move fibre_function() into the class, cache data
+
+    - remove fibre_function()
+    - new _setdefault_fibre_data()
+    - update FibresActiveTLTerm.get_fargs(), .stress_function(),
+      tan_mod_function()
+
+- merge branch 'parallel-pc-fieldsplit'
+
+  - support 'fieldsplit' preconditioner in PETScKrylovSolver
+
+    - new .set_field_split()
+    - update .__init__(), .create_ksp()
+
+  - setup 'fieldsplit' preconditioner in biot_parallel_interactive.py example
+  - update docstring of biot_parallel_interactive.py example
+
+- docs:
+
+  - sync IGA section with current state
+  - document refinement_level configuration option in users guide
+  - stop omitting time_poisson_explicit.py in script/gen_gallery.py
+  - sync module index of developer guide with current sources
+
+- scripts:
+
+  - new script/show_mesh_info.py
+  - script/convert_mesh.py: update --list option to list also readable formats
+
+    - rename & update output_writable_meshes() -> output_mesh_formats()
+
+- examples and tests:
+
+  - parallel examples: fix race condition when output directory does not exist
+  - adjust final time in time_poisson_explicit.py
+
+- miscellaneous updates:
+
+  - merge branch 'fix-mat-by-region-for-surfaces2'
+
+    - update Region.get_cells() to obey parent region
+    - fix Region.get_cell_indices() for non-disjoint, non-subset cells
+
+  - remove useless FEField._create_interpolant()
+  - remove obsolete SurfaceLaplaceLayerTerm, SurfaceCoupleLayerTerm
+  - update Problem.from_conf() to support refinement_level configuration option
+  - fix argument name in docstring of FieldVariable.evaluate()
+  - fix NEUMeshIO.read() for empty lines and 3_8 cells
+  - fix Region.get_facet_indices() for safe numpy casting on windows10
+
+.. _2015.3-2015.4:
+
+from 2015.3 to 2015.4
+=====================
+
+- basic support for restart files
+
+  - merge branch restart-files
+  - simple.py: new --save-restart, --load-restart options
+  - new Problem.get_restart_filename(), .save_restart(), .load_restart() -
+    update .init_time() to initialize new ._restart_filenames attribute
+  - update Problem.__init__(): update default conf to have options attribute
+  - fix Variables.set_data() to use step argument
+  - update SimpleTimeSteppingSolver.__call__() to support restart files
+  - update Problem for restarting stationary problems - update .reset() to
+    initialize ._restart_filenames attribute
+  - update StationarySolver.__call__() to support restart files
+  - new TimeStepper.get_state(), .set_state()
+  - new VariableTimeStepper.get_state(), .set_state()
+  - update VariableTimeStepper to have current state stored in .times, .dts
+
+    - new .advance(), .iter_from_current()
+    - update .set_step(), .__iter__()
+
+  - update AdaptiveTimeSteppingSolver.__call__() to support restart files
+  - update SimpleTimeSteppingSolver.__call__() for variables with history
+  - update TimeStepper.iter_from(), new .advance()
+  - check step in Variable.set_data()
+  - docs: update user's guide - introduce restart files
+
+- linear combination boundary conditions:
+
+  - improve docstrings of MRLCBCOperator, ShiftedPeriodicOperator
+  - update ShiftedPeriodicOperator.__init__() for pyflakes
+  - support general linear combination of DOFs in a node
+
+    - merge branch nodal-lcbcs
+    - update LCBCOperators.make_global_operator() for rhs without column
+      variable
+    - new NodalLCOperator - general linear combination of DOFs in a node
+    - new examples/linear_elasticity/nodal_lcbcs.py + test
+
+  - fix IntegralMeanValueOperator for several DOFs per node
+
+- examples and tests:
+
+  - merge branch example-balloon
+
+    - new meshes/3d/unit_ball.mesh
+    - new examples/large_deformation/balloon.py + test
+
+- miscellaneous updates:
+
+  - do not check facet-only meshes in FEDomain.fix_element_orientation() -
+    fixes segfault
+  - remove unused doc/images/sfepy_gui.png
+  - fix Mesh.copy() to provide default name
+  - fix bubble DOFs setup in H1DiscontinuousField._setup_global_base() -
+    initialize .bubble_remap attribute
+  - clean up sfepy/postprocess/time_history.py
+  - fix extract_time_history() for no element groups
+  - docs: fix Green strain definitions
+  - allow None as problem argument in MiniAppBase.__init__()
+  - lib.lapack import bug fix (merge pull request #301 from rexfuzzle/master)
+  - fix output order of scipy.linalg.lapack functions in ScipySGEigenvalueSolver
+  - fix version comparison in dets_fast()
+  - set SYMPY_MIN_VERSION to 0.7.3 in sfepy/version.py (merge branch
+    sympy-lcbc-compat)
+  - fix describe_geometry() to initialize base functions in membrane_geo
+  - merge branch fix-mat-by-region-for-surfaces
+
+    - allow non-cell regions in ConstantFunctionByRegion.get_constants()
+    - update Region.get_cell_indices() to allow cells to be sutperset of region
+      cells
+
+  - fix access to mat_id in GenericFileSource.create_source(), .get_mat_id()
+
+.. _2015.2-2015.3:
+
+from 2015.2 to 2015.3
+=====================
+
+- preliminary support for parallel computing
+
+  - merge branch parallel
+  - allow constructing empty regions
+
+    - update Domain.create_region(), Region.setup_from_highest(), .finalize()
+    - new allow_empty argument
+
+  - new sfepy/parallel/__init__.py
+  - new sfepy/parallel/setup.py, update sfepy/setup.py
+  - new sfepy/parallel/parallel.py - start PETSc-based parallelization
+
+    - new get_inter_facets(), create_task_dof_maps(), distribute_field_dofs(),
+      get_local_ordering(), get_sizes(), expand_dofs(), create_petsc_matrix(),
+      apply_ebc_to_matrix(), assemble_to_petsc()
+
+  - use cmesh.tdim in get_inter_facets()
+  - new create_prealloc_data()
+  - new partition_mesh()
+  - new petsc_call() linear solver decorator
+  - update PETScKrylovSolver for parallel use
+
+    - allow passing in PETSc matrices and vectors
+    - new sub_precond option
+    - update .__init__() - new comm argument, setup converged_reasons there
+    - update .create_ksp()
+    - remove .set_matrix(), new .create_petsc_matrix()
+    - update .__call__() - new comm argument, use petsc_call() decorator,
+      return PETSc solution vector for PETSc right-hand side vector
+    - update docstring
+
+  - new view_petsc_local()
+  - new create_local_petsc_vector()
+  - new create_gather_scatter(), create_gather_to_zero()
+  - new verify_task_dof_maps()
+  - new is_matrix argument in Problem.time_update(), .update_equations()
+  - update PETScKrylovSolver.__call__() to output actual solver and
+    preconditioner
+  - new distribute_fields_dofs() - support multiple fields
+  - new get_composite_sizes()
+  - split assemble_to_petsc() - new assemble_rhs_to_petsc(),
+    assemble_mtx_to_petsc()
+  - remove debug() call in Equations.get_graph_conns()
+  - support non-reduced (full size) system assembling in Equations and
+    Variables
+
+    - update Equations.time_update(), .get_graph_conns(),
+      .create_matrix_graph() - new active_only argument
+    - update create_adof_conns(), Variables.equation_mapping() - new
+      active_only argument
+
+  - update Problem for non-reduced (full size) system assembling
+
+    - new .active_only attribute
+    - update .__init__(), .update_equations() - new active_only argument
+
+  - new PETScNonlinearSolver
+  - new sfepy/parallel/evaluate.py - new PETScParallelEvaluator
+  - new setup_composite_dofs()
+  - new create_petsc_system()
+  - update setup.py - new petsc4py and pymetis version checks - update
+    sfepy/version.py
+  - filter-out -h, --help from sys.argv options passed to petsc4py
+
+    - -h, --help is avaliable for user options, -help can be used to show PETSc
+      options
+
+  - new sfepy/parallel/plot_parallel_dofs.py - new mark_subdomains(),
+    label_dofs(), plot_partitioning(), plot_local_dofs()
+
+  - new examples/diffusion/poisson_parallel_interactive.py
+  - new examples/multi_physics/biot_parallel_interactive.py
+  - update setup.py - new mpi4py version check - update sfepy/version.py
+  - docs:
+
+    - sync module index of developer guide with current sources
+    - parallel examples: add mpi4py requirement
+    - update installation requirements
+    - update user's guide - add basic parallel problem solving description -
+      update developer guide, doc/index.rst
+
+  - update test_install.py to test parallel examples
+
+- (mostly) fix finding of reference coordinates
+
+  - merge branch fix-find-ref-coors - (almost) solves #285
+
+    - TODO: make get_xi_tensor() robust w.r.t. multiple solutions, prefer those
+      inside a cell
+
+  - rename get_ref_coors() -> get_ref_coors_convex(), refc_find_ref_coors() ->
+    refc_find_ref_coors_convex(), find_ref_coors() -> find_ref_coors_convex()
+  - new refc_find_ref_coors() C function, new find_ref_coors()
+  - new get_potential_cells(), get_ref_coors_general()
+  - remove strategy argument of get_ref_coors_convex(), use extrapolate flag
+  - new get_ref_coors() - support 'general' and 'convex' strategies
+  - update .evaluate_at() and its calls for new get_ref_coors()
+
+    - update H1HierarchicVolumeField.evaluate_at()
+    - update H1NodalMixin.evaluate_at()
+    - update FieldVariable.evaluate_at(), .set_from_other()
+    - update Probe.probe()
+
+  - fix comment in get_xi_tensor()
+  - new tests/test_ref_coors.py + cross3d.mesh
+
+- allow field gradient evaluation in arbitrary points
+
+  - merge branch evaluate-gradient
+  - update evaluate_in_rc() for gradients
+  - update .evaluate_at() and its calls - new mode argument, support gradients
+
+    - update H1HierarchicVolumeField.evaluate_at()
+    - update H1NodalMixin.evaluate_at()
+    - update FieldVariable.evaluate_at(), .set_from_other()
+    - update Probe.probe()
+
+  - update test_invariance_qp() in tests/test_mesh_interp.py - test field
+    gradients, increase field approximation order to 2
+  - fix eval_lagrange_simplex() - initialize properly gradient output to zeros
+  - make vector field gradient in evaluate_in_rc() compatible with ev_grad
+    term - define ib type
+  - update test_invariance_qp() to test several meshes with different cell
+    types
+  - update test_invariance_qp() for new prepare_variable(), update reporting
+  - new test_field_gradient() in tests/test_mesh_interp.py
+
+- unify evaluation of basis functions using basis-specific contexts, part 1
+
+  - merge branch basis-context
+  - hide basis-specific arguments in lagrange.c into new LagrangeContext struct
+
+    - update get_barycentric_coors(), get_xi_simplex(), get_xi_tensor(),
+      eval_lagrange_simplex(), eval_lagrange_tensor_product() C functions
+    - update get_barycentric_coors(), eval_lagrange_simplex(),
+      eval_lagrange_tensor_product(), evaluate_in_rc() cython functions
+
+  - update evaluate_in_rc() for merged 'evaluate-gradient' branch
+  - new print_context_lagrange() C function
+  - update find_ref_coors_convex, find_ref_coors() (cython) for
+    LagrangeContext - update refc_find_ref_coors_convex(),
+    refc_find_ref_coors() C functions
+  - new get_xi_dist() C function, update LagrangeContext - add tdim attribute
+  - new CLagrangeContext cython class, wraps LagrangeContext C struct
+
+    - update LagrangeContext cython definition
+    - new CLagrangeContext.__cinit__(), .__dealloc__(), .__str__(), .cprint()
+
+  - update refc_find_ref_coors_convex(), refc_find_ref_coors() - new qp_eps
+    argument
+
+    - new abstract BasisContext C struct
+    - remove _get_xi_dist()
+    - no more dependence on lagrange.h
+
+  - new abstract CBasisContext cython class
+  - update find_ref_coors_convex, find_ref_coors() (cython) for CBasisContext -
+    and for updated refc_find_ref_coors_convex(), refc_find_ref_coors()
+  - new H1NodalMixin.create_basis_context()
+  - update get_ref_coors_convex(), get_ref_coors_general() - use
+    Field.create_basis_context()
+  - new H1HierarchicVolumeField.create_basis_context()
+
+- move common extension modules to sfepy/discrete/common/extmods
+
+  - merge branch 'common-extmods'
+  - new sfepy/discrete/common/extmods/ - move common extension modules there
+
+    - move sfepy/discrete/fem/extmods/{_fmfield.pxd, _fmfield.pyx,
+      _geommech.pxd, _geommech.pyx, assemble.pyx, cmesh.pxd, cmesh.pyx,
+      common.h, common_python.c, crefcoors.pyx, fmfield.c}
+
+  - new sfepy/discrete/common/extmods/__init__.py
+  - update setup.py files, new sfepy/discrete/common/extmods/setup.py
+  - update imports
+
+- unify evaluation of basis functions using basis-specific contexts, part 2
+
+  - merge branch basis-context2
+  - update LagrangeContext
+
+    - add .eval_basis, .order, .is_bubble attributes
+    - new .iel, .geo_ctx, .mesh_coors, .mesh_conn, .n_cell, .n_cp attributes
+    - change .bc attribute type
+    - new .mbfg attribute
+    - update print_context_lagrange()
+
+  - update CLagrangeContext
+
+    - update for current LagrangeContext
+    - update .__cinit__(), new .is_bubble property
+    - new .evaluate()
+    - update .__cinit__()
+    - new ._geo_ctx, .mesh_coors, .mesh_conn, .base1d attributes
+    - new .iel, .geo_ctx properties
+    - new .mbfg attribute
+
+  - new LagrangePolySpace
+
+    - new .create_context()
+    - new ._eval_base(), update derived classes
+
+      - update LagrangeSimplexPolySpace:
+
+        - update .__init__() - new init_context argument
+        - remove ._eval_base()
+
+      - update LagrangeSimplexBPolySpace:
+
+        - update .__init__() - new init_context argument
+        - update .create_context() - support **kwargs
+        - remove ._eval_base()
+
+      - update LagrangeTensorProductPolySpace:
+
+        - update .__init__() - new init_context argument
+        - remove ._eval_base()
+
+  - update LagrangeSimplexPolySpace, LagrangeTensorProductPolySpace
+
+    - inherit from LagrangePolySpace
+    - new LagrangeSimplexBPolySpace.create_context()
+
+  - new fmf_set_qp() C function
+  - new eval_basis_lagrange() C function, update eval_lagrange_simplex() -
+    support only a single point
+  - update get_xi_dist() for current LagrangeContext - update get_xi_simplex(),
+    get_xi_tensor()
+  - update H1NodalMixin.create_basis_context()
+  - update BasisContext - new .eval_basis, .iel attributes
+  - move evaluate_in_rc() from bases.pyx to crefcoors.pyx, update for
+    BasisContext - great simplification by using abstract
+    BasisContext.eval_basis()
+
+  - remove cython functions replaced by CLagrangeContext.evaluate()
+
+    - remove get_barycentric_coors(), eval_lagrange_simplex(),
+      eval_lagrange_tensor_product()
+
+  - remove unused definitions in bases.pyx
+  - move global_interp.py into sfepy/discrete/common/
+  - move H1NodalMixin.evaluate_at() -> Field.evaluate_at(), remove
+    H1HierarchicVolumeField.evaluate_at()
+  - update imports
+  - improve error message in fmf_copy()
+  - allow higher-order cell-vertex connectivities in CMesh.from_data()
+  - move buffer for cell coordinates into context
+
+    - update BasisContext, LagrangeContext - new e_coors_max attribute
+    - update CLagrangeContext - new e_coors_max attribute, update .__cinit__()
+
+  - split meaning of .iel into .iel and new .is_dx attribute of BasisContext
+
+    - update BasisContext, LagrangeContext - new .is_dx attribute
+    - update CLagrangeContext.__cinit__()
+    - update evaluate_in_rc()
+    - update refc_find_ref_coors_convex(), refc_find_ref_coors() C functions -
+      set ctx->is_dx and ctx->iel
+    - update eval_basis_lagrange()
+
+  - update evaluate_in_rc() - add basic shape check of output buffer
+  - improve handling of get_xi_dist() failure in refc_find_ref_coors() -
+    initialize imin, imin and d_min are in sync
+  - update eval_basis_lagrange() for bubble functions. update
+    eval_lagrange_simplex()
+  - new NURBSContext C struct
+
+    - new print_context_nurbs(), get_xi_dist(), eval_basis_nurbs()
+    - update eval_bspline_basis_tp(), eval_nurbs_basis_tp() - new is_dx
+      argument
+
+  - new CNURBSContext cython class, wraps NURBSContext C struct
+
+    - new CNURBSContext.__cinit__(), .__dealloc__(), .__str__(), .cprint(),
+      .evaluate()
+
+  - update eval_mapping_data_in_qp(), eval_variable_in_qp(), eval_in_tp_coors()
+    for is_dx argument
+  - update IGDomain - new .eval_mesh attribute, update .__init__()
+  - new IGField.create_mesh(), .create_eval_mesh(), .create_basis_context()
+  - new Field.create_eval_mesh()
+  - fix Field.evaluate_at() - do not use FEM-specific attributes
+  - update get_ref_coors_general() for field.create_eval_mesh()
+  - update sfepy/discrete/common/__init__.py - import Field
+  - rename & update test_ref_coors() -> test_ref_coors_fem()
+
+    - remove field creation from Test.from_conf()
+    - use basis context for basis evaluation
+    - fix typo
+
+  - new test_ref_coors_iga() in tests/test_ref_coors.py
+  - update IGField to have approx_order attribute (make projections work)
+  - new test_projection_iga_fem() in tests/test_projections.py
+
+- merge pull request #298 from vlukes/el_eval
+
+  - new evaluation mode 'el_eval', 'el' mode removed
+  - update equations.evaluate()
+
+- merge pull request #300 from vlukes/mat_optim
+
+  - new example: material identification - multiscale analysis
+  - new example: material identification - mesh
+  - new tutorial: material identification
+
+- merge branch test-conditions
+
+  - move tests/test_ebcs.py -> tests/test_conditions.py
+  - tests/test_conditions.py: remove configuration
+  - new test_ebcs() in tests/test_conditions.py, update Test.from_conf()
+  - new test_epbcs() in tests/test_conditions.py
+  - update test_save_ebc() in tests/test_conditions.py
+  - move checking of applied conditions from test_ebcs() into new check_vec()
+  - new test_ics() in tests/test_conditions.py
+
+- merge branch how-to-contribute
+
+  - update generic installation instructions, add two section labels
+  - update how to contribute instructions in developer guide
+  - remove gitwash section from developer guide
+  - remove doc/dev/gitwash/
+  - update script/sync_module_docs.py
+  - update developer guide with Vladimir's suggestions
+
+- postprocessing and visualization:
+
+  - fix VTK version issue related to SetSource()
+  - fix VTK version issue related to Update()
+  - fix plot_dofs option in save_basis_on_mesh() for no element groups
+  - remove show argument of plot functions, use single code for 2D and 3D
+
+    - support 1D where applicable
+    - update plot_control_mesh()
+    - update plot_wireframe(), plot_entities(), label_global_entities(),
+      label_local_entities()
+    - update plot_points(), plot_mesh(), plot_global_dofs(), plot_local_dofs(),
+      plot_nodes()
+    - update plot_geometry(), plot_edges(), plot_faces()
+    - update plot_weighted_points(), plot_quadrature()
+    - update import in script/plot_mesh.py
+
+  - fix tetrahedralize_vtk_mesh()
+  - use tight bounding box in figure.savefig() calls in plot_parallel_dofs.py
+  - postproc.py: new --colormap option
+
+    - new set_colormap()
+    - update Viewer.build_mlab_pipeline(), .call_mlab()
+
+  - allow user-defined file sources in place of filename in
+    create_file_source()
+
+- probes:
+
+  - update Probe.__call__() to support keyword arguments
+  - update Probe.probe() - new ret_points argument, update docstring
+  - update VTK Probe.__call__() - new ret_points argument, update docstring,
+    new .dim attribute
+
+- materials:
+
+  - remove unused Material.set_data_from_variable()
+  - use expression materials when copy_materials=True in
+    Problem.create_evaluable()
+
+    - fixes evaluation of terms with materials not present in Problem.equations
+    - initialize Problem.conf.materials in Problem.__init__()
+
+  - remove unused Materials.semideep_copy()
+
+- regions:
+
+  - fix Region.get_facet_indices() for inner cell "corners"
+  - fix "Cannot cast array data ..." (Windows 8.1, Numpy 1.8.2)
+
+- terms:
+
+  - new PiezoStressTerm (ev_piezo_stress)
+  - new AdvectDivFreeTerm (dw_advect_div_free)
+
+- setup:
+
+  - remove unused IPYTHON_MIN_VERSION
+  - update package_check() - new show_only argument, update messages and
+    docstring
+  - update setup.py to show names and versions of dependencies at the end - new
+    check_versions()
+  - update Clean.run() build helper to clean *.pyd files (dynamic libs on
+    windows)
+  - increase SYMPY_MIN_VERSION to 0.7.2
+  - new scikits.umfpack and pysparse version checks - update sfepy/version.py
+
+- docs:
+
+  - update installation requirements - add scikit-umfpack
+  - fix label of theoretical background section
+  - fix indentation, include links.inc in user's guide
+
+- examples and tests:
+
+  - fix time_poisson_interactive.py for new copy_materials semantics
+  - time_poisson_interactive.py: update circle probe parameters in gen_lines()
+  - fix --show option in poisson_parallel_interactive.py example - update for
+    c985650d356bcc1eb3608f4144fc84299e67c458
+  - clean up piezo_elasticity.py example, use short syntax
+  - update piezo_elasticity.py example to compute stresses - new post_process()
+  - fix its2D_interactive.py for new copy_materials semantics, update
+    stress_strain(), nodal_stress()
+  - modal_analysis.py:
+
+    - new --axis option
+    - support optional positional argument for user-provided mesh
+    - fix --show option with user-provided mesh
+    - fix --n-eigs help message
+    - fix paths in help/docstring
+    - update --bc-kind option - new fixed mode, rename clamped -> cantilever
+    - new --ignore option
+    - improve reporting results
+    - update test_install.py for current modal_analysis.py
+    - fix line lengths
+
+  - new examples/diffusion/time_advection_diffusion.py + test
+
+- miscellaneous updates:
+
+  - remove whitespaces in linalg/utils.py
+  - replace dets_fast based on lapack_lite by numpy.linalg.det for numpy
+    version >= 1.8
+  - fix expand2d()
+  - remove duplicate line in get_ref_coors()
+  - fix docstring of DiffusionCoupling term
+  - fix sympy.zeros() call for sympy 0.7.6
+  - fix FieldVariable.setup_initial_conditions() for multiple conditions
+  - fix test_eigenvalue_solvers() to obey Test.can_fail
+  - clean up tests/test_msm_symbolic.py
+  - move tests/sympy_operators.py -> sfepy/linalg/sympy_operators.py
+  - new HDF5MeshIO.read_dimension()
+  - fix docstring of configure_output()
+  - fix exception message in FEDomain.fix_element_orientation()
+  - update PysparseEigenvalueSolver to support extra options
+  - script/show_authors.py: merge by names, show commit counts
+
 .. _2015.1-2015.2:
 
 from 2015.1 to 2015.2
