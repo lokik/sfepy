@@ -1,11 +1,13 @@
 #!/usr/bin/env python
+from __future__ import print_function
+from __future__ import absolute_import
 import shlex
 import subprocess
 
 def main():
     args = shlex.split('git log --pretty=format:"%an <%ae>"')
     p = subprocess.Popen(args, stdout=subprocess.PIPE)
-    out = p.communicate()[0].split('\n')
+    out = p.communicate()[0].decode().split('\n')
 
     done = set()
     unique = []
@@ -33,7 +35,7 @@ def main():
 
     for line in unique:
         record = counts[line]
-        print('%6d %s %s' % (record[0], line, ', '.join(record[1:])))
+        print(('%6d %s %s' % (record[0], line, ', '.join(record[1:]))))
 
 if __name__ == '__main__':
     main()

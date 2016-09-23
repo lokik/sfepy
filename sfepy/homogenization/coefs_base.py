@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 import os
 import time
 
@@ -11,7 +12,9 @@ from sfepy.solvers.ts import TimeStepper
 from sfepy.discrete.fem.meshio import HDF5MeshIO
 from sfepy.solvers import Solver, eig
 from sfepy.linalg import MatrixAction
-from utils import iter_sym, create_pis, create_scalar_pis
+from .utils import iter_sym, iter_nonsym, create_pis, create_scalar_pis
+import six
+from six.moves import range
 
 class MiniAppBase(Struct):
     def any_from_conf(name, problem, kwargs):
@@ -190,7 +193,7 @@ class CorrMiniApp(MiniAppBase):
                                                      None,
                                                      extend=extend)
 
-                    for _key, val in aux.iteritems():
+                    for _key, val in six.iteritems(aux):
                         if key:
                             new_key = _key + '_' + key
 
@@ -511,7 +514,7 @@ class CorrEqPar(CorrOne):
 
         eqns ={}
         for ir in range(self.dim):
-            for key_eq, val_eq in self.equations.iteritems():
+            for key_eq, val_eq in six.iteritems(self.equations):
                 eqns[key_eq] = val_eq % self.eq_pars[ir]
 
             problem.set_equations(eqns)
@@ -562,7 +565,7 @@ class PressureEigenvalueProblem(CorrMiniApp):
         if self.mode == 'explicit':
             tt = time.clock()
             mtx_aibt = nm.zeros(mtx_bt.shape, dtype=mtx_bt.dtype)
-            for ic in xrange(mtx_bt.shape[1]):
+            for ic in range(mtx_bt.shape[1]):
                 mtx_aibt[:,ic] = ls(mtx_bt[:,ic].toarray().squeeze())
             output('mtx_aibt: %.2f s' % (time.clock() - tt))
             action_aibt = MatrixAction.from_array(mtx_aibt)
@@ -879,24 +882,28 @@ class CoefSymSym(MiniAppBase):
 
     set_variables_default = staticmethod(set_variables_default)
 
+    iter_sym = staticmethod(iter_sym)
+    is_sym = True
+
     def __call__(self, volume, problem=None, data=None):
         problem = get_default(problem, self.problem)
 
         dim, sym = problem.get_dim(get_sym=True)
-        coef = nm.zeros((sym, sym), dtype=self.dtype)
+        nc = sym if self.is_sym else dim**2
+        coef = nm.zeros((nc, nc), dtype=self.dtype)
 
         term_mode = self.term_mode
         equations, variables = problem.create_evaluable(self.expression,
                                                         term_mode=term_mode)
 
-        for ir, (irr, icr) in enumerate(iter_sym(dim)):
+        for ir, (irr, icr) in enumerate(self.iter_sym(dim)):
             if isinstance(self.set_variables, list):
                 self.set_variables_default(variables, irr, icr, 'row',
                                            self.set_variables, data)
             else:
                 self.set_variables(variables, irr, icr, 'row', **data)
 
-            for ic, (irc, icc) in enumerate(iter_sym(dim)):
+            for ic, (irc, icc) in enumerate(self.iter_sym(dim)):
                 if isinstance(self.set_variables, list):
                     self.set_variables_default(variables, irc, icc, 'col',
                                                self.set_variables, data)
@@ -911,6 +918,10 @@ class CoefSymSym(MiniAppBase):
         coef /= self._get_volume(volume)
 
         return coef
+
+class CoefNonSymNonSym(CoefSymSym):
+    iter_sym = staticmethod(iter_nonsym)
+    is_sym = False
 
 class CoefFMSymSym(MiniAppBase):
     """
@@ -1128,11 +1139,15 @@ class CoefSym(MiniAppBase):
 
     set_variables_default = staticmethod(set_variables_default)
 
+    iter_sym = staticmethod(iter_sym)
+    is_sym = True
+
     def __call__(self, volume, problem=None, data=None):
         problem = get_default(problem, self.problem)
 
         dim, sym = problem.get_dim(get_sym=True)
-        coef = nm.zeros((sym,), dtype=self.dtype)
+        nc = sym if self.is_sym else dim**2
+        coef = nm.zeros((nc,), dtype=self.dtype)
 
         term_mode = self.term_mode
         equations, variables = problem.create_evaluable(self.expression,
@@ -1145,7 +1160,7 @@ class CoefSym(MiniAppBase):
         else:
             self.set_variables(variables, None, None, 'col', **data)
 
-        for ii, (ir, ic) in enumerate(iter_sym(dim)):
+        for ii, (ir, ic) in enumerate(self.iter_sym(dim)):
             if isinstance(self.set_variables, list):
                 self.set_variables_default(variables, ir, ic, 'row',
                                            self.set_variables, data)
@@ -1160,6 +1175,10 @@ class CoefSym(MiniAppBase):
         coef /= self._get_volume(volume)
 
         return coef
+
+class CoefNonSym(CoefSym):
+    iter_sym = staticmethod(iter_nonsym)
+    is_sym = False
 
 class CoefFMSym(MiniAppBase):
     """

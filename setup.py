@@ -91,8 +91,8 @@ def configuration(parent_package='', top_path=None):
     ]
     aux_scripts = [os.path.join('script', ii) for ii in aux_scripts]
 
-    config.add_data_files(('sfepy', ('VERSION', 'INSTALL', 'README', 'LICENSE',
-                                     'AUTHORS', 'build_helpers.py',
+    config.add_data_files(('sfepy', ('VERSION', 'INSTALL', 'README.rst',
+                                     'LICENSE', 'AUTHORS', 'build_helpers.py',
                                      'site_cfg_template.py', 'Makefile')))
     config.add_data_files(('sfepy/script', main_scripts))
     config.add_data_files(('sfepy/script', aux_scripts))
@@ -177,6 +177,10 @@ def check_versions(show_only=False):
                   show_only=show_only)
 
 def setup_package():
+    if not 'sdist' in sys.argv[1:]:
+        # Import setuptools to find a C compiler on windows.
+        import setuptools; setuptools
+
     from numpy.distutils.core import setup
 
     old_path = os.getcwd()

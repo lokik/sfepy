@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 from copy import copy
 
 import numpy as nm
@@ -25,6 +26,9 @@ def make_term_args(arg_shapes, arg_kinds, arg_types, ats_mode, domain,
         if isinstance(sh, basestr):
             if sh == 'D':
                 return dim
+
+            elif sh == 'D2':
+                return dim**2
 
             elif sh == 'S':
                 return sym
@@ -187,7 +191,7 @@ class Test(TestCommon):
         for domain in self.domains:
             self.report('domain: %s' % domain.name)
 
-            domain_geometry = domain.geom_els.values()[0].name
+            domain_geometry = list(domain.geom_els.values())[0].name
             if domain.shape.dim != domain.shape.tdim:
                 domain_geometry = '%d_%s' % (domain.shape.dim, domain_geometry)
 

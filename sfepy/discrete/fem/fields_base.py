@@ -11,6 +11,7 @@ Important attributes of continuous (order > 0) :class:`Field` and
 where `conn` is the mesh vertex connectivity, `econn` is the
 region-local field connectivity.
 """
+from __future__ import absolute_import
 import numpy as nm
 
 from sfepy.base.base import output, get_default, assert_
@@ -26,6 +27,7 @@ from sfepy.discrete.fem.fe_surface import FESurface
 from sfepy.discrete.integrals import Integral
 from sfepy.discrete.fem.linearizer import (get_eval_dofs, get_eval_coors,
                                            create_output)
+import six
 
 def set_mesh_coors(domain, fields, coors, update_fields=False, actual=False,
                    clear_all=True):
@@ -35,7 +37,7 @@ def set_mesh_coors(domain, fields, coors, update_fields=False, actual=False,
         domain.cmesh.coors[:] = coors
 
     if update_fields:
-        for field in fields.itervalues():
+        for field in six.itervalues(fields):
             field.setup_coors(coors)
             field.clear_mappings(clear_all=clear_all)
 
@@ -252,6 +254,9 @@ class FEField(Field):
         self.setup_coors()
         self.clear_mappings(clear_all=True)
         self.clear_qp_base()
+        self.basis_transform = None
+        self.econn0 = None
+        self.unused_dofs = None
 
     def _set_approx_order(self, approx_order):
         """
@@ -346,6 +351,16 @@ class FEField(Field):
             if efs.ndim < 2:
                 efs = efs[:,nm.newaxis]
             self.efaces = nm.hstack((self.efaces, efs))
+
+        if gel.dim == 3:
+            self.eedges = gel.edges.copy()
+            efs = node_desc.edge
+            if efs is not None:
+                efs = nm.array(efs).squeeze()
+
+                if efs.ndim < 2:
+                    efs = efs[:,nm.newaxis]
+                self.eedges = nm.hstack((self.eedges, efs))
 
     def setup_coors(self, coors=None):
         """
@@ -496,7 +511,7 @@ class FEField(Field):
         """
         qpkey = (integral.order, key)
 
-        if not self.qp_coors.has_key(qpkey):
+        if qpkey not in self.qp_coors:
             if (key[0] == 's') and not self.is_surface:
                 dim = self.gel.dim - 1
                 n_fp = self.gel.surface_facet.n_vertex
@@ -509,6 +524,66 @@ class FEField(Field):
             self.qp_coors[qpkey] = Struct(vals=vals, weights=weights)
 
         return self.qp_coors[qpkey]
+
+    def substitute_dofs(self, gsubs, econn=None):
+        """
+        Perform facet DOF substitutions according to `gsubs`.
+
+        Modifies `self.econn` in-place and sets `self.econn0` and
+        `self.unused_dofs`.
+        """
+        self.econn0 = self.econn.copy()
+
+        if econn is not None:
+            self.econn = econn
+
+        else:
+            if gsubs is None: return
+
+            self._substitute_dofs(gsubs)
+
+        self.unused_dofs = nm.setdiff1d(self.econn0, self.econn)
+
+    def restore_dofs(self):
+        """
+        Undoes the effect of :func:`FEField.substitute_dofs()`.
+        """
+        if self.econn0 is None:
+            raise ValueError('no original DOFs to restore!')
+
+        self.econn = self.econn0
+        self.econn0 = None
+        self.unused_dofs = None
+
+    def set_basis_transform(self, transform):
+        """
+        Set local element basis transformation.
+
+        The basis transformation is applied in :func:`FEField.get_base()` and
+        :func:`FEField.create_mapping()`.
+
+        Parameters
+        ----------
+        transform : array, shape `(n_cell, n_ep, n_ep)`
+            The array with `(n_ep, n_ep)` transformation matrices for each cell
+            in the field's region, where `n_ep` is the number of element DOFs.
+        """
+        self.basis_transform = transform
+
+    def restore_substituted(self, vec):
+        """
+        Restore values of the unused DOFs using the transpose of the applied
+        basis transformation.
+        """
+        if (self.econn0 is None) or (self.basis_transform is None):
+            raise ValueError('no original DOF values to restore!!')
+
+        vec = vec.reshape((self.n_nod, self.n_components)).copy()
+        evec = vec[self.econn]
+
+        vec[self.econn0] = nm.einsum('cji,cjk->cik', self.basis_transform, evec)
+
+        return vec.ravel()
 
     def get_base(self, key, derivative, integral, iels=None,
                  from_geometry=False, base_only=True):
@@ -523,14 +598,15 @@ class FEField(Field):
         _key = key if not from_geometry else 'g' + key
         bf_key = (integral.order, _key, derivative)
 
-        if not self.bf.has_key(bf_key):
+        if bf_key not in self.bf:
             if (iels is not None) and (self.ori is not None):
                 ori = self.ori[iels]
 
             else:
                 ori = self.ori
 
-            self.bf[bf_key] = ps.eval_base(qp.vals, diff=derivative, ori=ori)
+            self.bf[bf_key] = ps.eval_base(qp.vals, diff=derivative, ori=ori,
+                                           transform=self.basis_transform)
 
         if base_only:
             return self.bf[bf_key]
@@ -901,7 +977,8 @@ class FEField(Field):
             conn = nm.take(dconn, iels.astype(nm.int32), axis=0)
             mapping = VolumeMapping(coors, conn, poly_space=geo_ps)
             vg = mapping.get_mapping(qp.vals, qp.weights, poly_space=ps,
-                                     ori=self.ori)
+                                     ori=self.ori,
+                                     transform=self.basis_transform)
 
             out = vg
 
@@ -926,7 +1003,7 @@ class FEField(Field):
                 self.create_bqp(region.name, integral)
                 qp = self.qp_coors[(integral.order, esd.bkey)]
 
-                abf = ps.eval_base(qp.vals[0])
+                abf = ps.eval_base(qp.vals[0], transform=self.basis_transform)
                 bf = abf[..., self.efaces[0]]
 
                 indx = self.gel.get_surface_entities()[0]
@@ -949,7 +1026,7 @@ class FEField(Field):
             else:
                 # Do not use BQP for surface fields.
                 qp = self.get_qp(sd.face_type, integral)
-                bf = ps.eval_base(qp.vals)
+                bf = ps.eval_base(qp.vals, transform=self.basis_transform)
 
                 sg = mapping.get_mapping(qp.vals, qp.weights,
                                          poly_space=Struct(n_nod=bf.shape[-1]),
@@ -1015,7 +1092,7 @@ class VolumeField(FEField):
         Setup the field region geometry.
         """
         cmesh = self.domain.cmesh
-        for key, gel in self.domain.geom_els.iteritems():
+        for key, gel in six.iteritems(self.domain.geom_els):
             ct = cmesh.cell_types
             if (ct[self.region.cells] == cmesh.key_to_index[gel.name]).all():
                 self.gel = gel
@@ -1215,7 +1292,7 @@ class SurfaceField(FEField):
         """
         Setup the field region geometry.
         """
-        for key, vgel in self.domain.geom_els.iteritems():
+        for key, vgel in six.iteritems(self.domain.geom_els):
             self.gel = vgel.surface_facet
             break
 

@@ -529,11 +529,16 @@ cdef class CMesh:
 
         indices = np.empty(num, dtype=np.uint32)
         offsets = np.empty(_entities.num + 1, dtype=np.uint32)
-        _incident.num = _entities.num
-        _incident.n_incident = num
-        _incident.indices = &indices[0]
-        _incident.offsets = &offsets[0]
-        mesh_get_incident(self.mesh, _incident, dim, _entities, dent)
+
+        if num > 0:
+            _incident.num = _entities.num
+            _incident.n_incident = num
+            _incident.indices = &indices[0]
+            _incident.offsets = &offsets[0]
+            mesh_get_incident(self.mesh, _incident, dim, _entities, dent)
+
+        else:
+            offsets[:] = 0
 
         if ret_offsets:
             return indices, offsets
@@ -548,10 +553,12 @@ cdef class CMesh:
                       np.ndarray[uint32, mode='c', ndim=1] offsets not None,
                       int32 dim):
         """
-        Get local ids of non-unique entities `incident` of dimension `dim`
-        (with given `offsets` per `entities`) incident to `entities` of
-        dimension `dent`, see `mesh_get_incident()`, with respect to
-        `entities`.
+        Get local ids of `entities` of dimension `dent` in non-unique entities
+        `incident` of dimension `dim` (with given `offsets` per `entities`)
+        incident to `entities`, see `mesh_get_incident()`.
+
+        The function searches `entities` in `incident` -> `entities`
+        connectivity for each non-unique entity in `incident`.
         """
         cdef Indices _entities[1], _local_ids[1]
         cdef MeshConnectivity _incident[1]

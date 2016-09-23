@@ -1,5 +1,5 @@
 # SfePy version
-__version__ = '2016.1'
+__version__ = '2016.2'
 
 # "Minimal" supported versions.
 NUMPY_MIN_VERSION = '1.3'
@@ -30,7 +30,7 @@ def get_basic_info(version=__version__):
     for up_dir in ['..', '.']:
         top_dir = op.normpath(op.realpath(op.join(op.dirname(__file__),
                                                   up_dir)))
-        aux = op.join(top_dir, 'README')
+        aux = op.join(top_dir, 'README.rst')
         if op.isfile(aux):
             break
     else:

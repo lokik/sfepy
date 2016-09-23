@@ -1,6 +1,9 @@
 """
 Some utilities for work with units of physical quantities.
 """
+from __future__ import absolute_import
+import six
+from six.moves import range
 try:
     import sympy as sm
 except ImportError:
@@ -48,6 +51,9 @@ prefixes = {
 
 inv_prefixes = invert_dict(prefixes)
 
+num_prefixes = [str(ii) for ii in range(-12, 13)]
+prefixes.update(dict(((key, 10**int(key)) for key in num_prefixes)))
+
 class Unit(Struct):
     """
     A unit of a physical quantity. The prefix and coefficient of the unit
@@ -94,15 +100,21 @@ class Unit(Struct):
     """
     
     @staticmethod
-    def get_prefix(coef, bias=0.1, omit=()):
+    def get_prefix(coef, bias=0.1, omit=None):
         """
         Get the prefix and numerical multiplier corresponding to a numerical
         coefficient, omitting prefixes in omit tuple.
         """
-        values = [val for key, val in prefixes.iteritems() if key not in omit]
+        if omit is None:
+            omit = num_prefixes
+
+        values = [val for key, val in six.iteritems(prefixes) if key not in omit]
         coefs = nm.array(values, dtype=nm.float64)
         coefs.sort()
         ii = nm.searchsorted(coefs, bias*coef, side='left')
+
+        if ii == len(coefs):
+            ii = ii - 1
 
         cc = coefs[ii]
         prefix = inv_prefixes[cc]
@@ -113,7 +125,7 @@ class Unit(Struct):
     def __init__(self, name):
         self.name = name
 
-        aux = sorted(prefixes.keys(), reverse=True)
+        aux = sorted(list(prefixes.keys()), reverse=True)
         for prefix in aux:
             lp = len(prefix)
             if (prefix == name[:lp]) and (lp < len(name)): break
@@ -193,7 +205,7 @@ class Quantity(Struct):
         self.def_coef = float(self.symbolic_value.subs(self.def_names))
 
         coef_dict = {}
-        for key, val in self.def_units.iteritems():
+        for key, val in six.iteritems(self.def_units):
             coef_dict[val.name] = self.units[key].coef
         self.coef_dict = coef_dict
         
@@ -210,9 +222,11 @@ class Quantity(Struct):
 
         return name_dict, unit_dict
 
-    def __call__(self, prefix=None, omit=('c', 'd')):
+    def __call__(self, prefix=None, omit=None):
         """Get the quantity units."""
         if prefix is None:
+            if omit is None:
+                omit = ['c', 'd'] + num_prefixes
             prefix, mul = Unit.get_prefix(self.coef, omit=omit)
 
         else:
