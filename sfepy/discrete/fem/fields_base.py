@@ -544,6 +544,10 @@ class FEField(Field):
 
         self.unused_dofs = nm.setdiff1d(self.econn0, self.econn)
 
+        import sfepy.discrete.fem.refine_hanging as rh
+        basis_transform = rh.eval_basis_transform(self, subs)
+        self.set_basis_transform(basis_transform)
+
     def restore_dofs(self):
         """
         Undoes the effect of :func:`FEField.substitute_dofs()`.
@@ -554,6 +558,7 @@ class FEField(Field):
         self.econn = self.econn0
         self.econn0 = None
         self.unused_dofs = None
+        self.basis_transform = None
 
     def set_basis_transform(self, transform):
         """
