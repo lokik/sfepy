@@ -67,15 +67,18 @@ class Equations(Container):
             objs.append(eq)
             ii += 1
 
-        obj = Equations(objs)
+        obj = Equations(objs, collect = False)
+        obj.materials = materials
+        obj.variables = variables
 
         return obj
 
-    def __init__(self, equations):
+    def __init__(self, equations, collect = True):
         Container.__init__(self, equations)
 
-        self.variables = Variables(self.collect_variables())
-        self.materials = Materials(self.collect_materials())
+        if collect:
+          self.variables = Variables(self.collect_variables())
+          self.materials = Materials(self.collect_materials())
 
         self.domain = self.get_domain()
 
