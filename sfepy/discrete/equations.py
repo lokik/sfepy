@@ -67,21 +67,44 @@ class Equations(Container):
             objs.append(eq)
             ii += 1
 
-        obj = Equations(objs)
+        obj = Equations(objs, collect = False)
+        obj.materials = materials
+        obj.variables = variables
 
         return obj
 
-    def __init__(self, equations):
+    def __init__(self, equations, collect = True):
         Container.__init__(self, equations)
 
-        self.variables = Variables(self.collect_variables())
-        self.materials = Materials(self.collect_materials())
+        if collect:
+          self.variables = Variables(self.collect_variables())
+          self.materials = Materials(self.collect_materials())
 
         self.domain = self.get_domain()
 
         self.active_bcs = set()
 
         self.collect_conn_info()
+
+    def add_equation(self, equation):
+        """
+        Add a new equation.
+
+        Parameters
+        ----------
+        equation : Equation instance
+                    The new equation.
+        """
+        self.append(equation)
+        self.variables.extend(
+             set(equation.collect_variables() ) - set(self.variables)
+        )
+        self.materials.extend(
+             set(equation.collect_materials() ) - set(self.materials)
+        )
+        equation.collect_conn_info(self.conn_info)
+        if not self.domain:
+           self.domain = self.get_domain()
 
     def create_subequations(self, var_names, known_var_names=None):
         """
