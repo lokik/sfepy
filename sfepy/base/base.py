@@ -33,7 +33,7 @@ def get_debug():
     Utility function providing ``debug()`` function.
     """
     try:
-        import IPython
+        import IPythonxxxx
 
     except ImportError:
         debug = None
@@ -49,8 +49,12 @@ def get_debug():
                     ip = get_ipython()
 
                 except NameError:
-                    from IPython.frontend.terminal.embed \
-                         import InteractiveShellEmbed
+                    try:
+                        from IPython.frontend.terminal.embed \
+                             import InteractiveShellEmbed
+                    except ModuleNotFoundError:
+                        from IPython.terminal.embed \
+                             import InteractiveShellEmbed
                     ip = InteractiveShellEmbed()
 
                 colors = ip.colors

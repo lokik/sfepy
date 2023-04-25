@@ -4,10 +4,10 @@ cimport cython
 cimport numpy as np
 import numpy as np
 
-cimport _fmfield as _f
-from _fmfield cimport FMField
+from . cimport _fmfield as _f
+from ._fmfield cimport FMField
 
-cimport cmesh as cm
+from . cimport cmesh as cm
 
 from types cimport int32, float64, complex128
 
