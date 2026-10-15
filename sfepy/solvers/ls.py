@@ -818,7 +818,7 @@ class PETScKrylovSolver(LinearSolver):
             prhs = rhs
 
         else:
-            prhs = pmtx.getVecLeft()
+            prhs = pmtx.createVecLeft()
             prhs[...] = rhs
 
         if x0 is not None:
@@ -826,13 +826,13 @@ class PETScKrylovSolver(LinearSolver):
                 psol = x0
 
             else:
-                psol = pmtx.getVecRight()
+                psol = pmtx.createVecRight()
                 psol[...] = x0
 
             ksp.setInitialGuessNonzero(True)
 
         else:
-            psol = pmtx.getVecRight()
+            psol = pmtx.createVecRight()
 
             ksp.setInitialGuessNonzero(False)
 
